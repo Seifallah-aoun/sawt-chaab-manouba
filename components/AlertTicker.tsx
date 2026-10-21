@@ -88,35 +88,36 @@ export default function AlertTicker() {
     >
       <div className="container mx-auto flex max-w-6xl items-center justify-between gap-3">
         {/* Left Badge: Alert Title with live indicator */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
             <span className="relative inline-flex rounded-full h-2 w-2 bg-red-600" />
           </span>
-          <span className="inline-flex items-center gap-1.5 font-black text-red-700 dark:text-red-400 text-[11px] sm:text-xs">
-            <Bell className="h-3.5 w-3.5" />
-            <span>مستجدات وتنبيهات الدائرة:</span>
+          <span className="inline-flex items-center gap-1 font-black text-red-700 dark:text-red-400 text-[11px] sm:text-xs">
+            <Bell className="h-3.5 w-3.5 shrink-0" />
+            <span className="hidden sm:inline">مستجدات وتنبيهات الدائرة:</span>
+            <span className="sm:hidden font-bold">تنبيه:</span>
           </span>
           {isLive && (
             <span className="hidden md:inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700 dark:bg-red-950/60 dark:text-red-300">
               <Radio className="h-2.5 w-2.5 animate-pulse text-red-600" />
-              تحديث تلقائي مباشر
+              تحديث تلقائي
             </span>
           )}
         </div>
 
         {/* Center: Dynamic News Message */}
-        <div className="flex-1 overflow-hidden">
-          <div className="flex items-center gap-2 animate-fadeIn transition-opacity">
+        <div className="flex-1 min-w-0 overflow-hidden">
+          <div className="flex items-center gap-1.5 sm:gap-2 animate-fadeIn transition-opacity">
             {currentAlert.isPinned && (
-              <span className="inline-flex items-center gap-1 rounded-md bg-amber-500 text-white px-1.5 py-0.5 text-[10px] font-bold shrink-0 shadow-xs">
+              <span className="inline-flex items-center gap-1 rounded-md bg-amber-500 text-white px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold shrink-0 shadow-xs">
                 <Pin className="h-2.5 w-2.5" />
-                <span>مثبت</span>
+                <span className="hidden xs:inline">مثبت</span>
               </span>
             )}
 
             <span
-              className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold shrink-0 ${
+              className={`rounded-md px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold shrink-0 max-w-[85px] sm:max-w-none truncate ${
                 currentAlert.isUrgent
                   ? "bg-red-600 text-white"
                   : currentAlert.isCustom
@@ -132,25 +133,25 @@ export default function AlertTicker() {
                 href={currentAlert.link}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-medium text-zinc-900 dark:text-zinc-100 hover:text-red-600 dark:hover:text-red-400 line-clamp-1 text-xs inline-flex items-center gap-1 transition"
+                className="font-medium text-zinc-900 dark:text-zinc-100 hover:text-red-600 dark:hover:text-red-400 truncate text-[11px] sm:text-xs inline-flex items-center gap-1 transition"
               >
-                <span>{currentAlert.title}</span>
+                <span className="truncate">{currentAlert.title}</span>
                 <ExternalLink className="h-2.5 w-2.5 shrink-0 text-zinc-400" />
               </a>
             ) : (
-              <p className="font-medium text-zinc-800 dark:text-zinc-200 line-clamp-1 text-xs">
+              <p className="font-medium text-zinc-800 dark:text-zinc-200 truncate text-[11px] sm:text-xs">
                 {currentAlert.title}
               </p>
             )}
 
-            <span className="hidden sm:inline-block text-[10px] text-zinc-400 shrink-0">
+            <span className="hidden md:inline-block text-[10px] text-zinc-400 shrink-0">
               ({currentAlert.source} • {currentAlert.pubDate})
             </span>
           </div>
         </div>
 
         {/* Right Controls */}
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
           <button
             type="button"
             onClick={() =>
@@ -159,7 +160,7 @@ export default function AlertTicker() {
             className="rounded p-1 text-zinc-500 hover:bg-zinc-200/60 hover:text-zinc-800 dark:hover:bg-zinc-800 transition cursor-pointer"
             title="التالي"
           >
-            <ChevronRight className="h-3.5 w-3.5" />
+            <ChevronRight className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
           </button>
           <button
             type="button"
@@ -167,15 +168,15 @@ export default function AlertTicker() {
             className="rounded p-1 text-zinc-500 hover:bg-zinc-200/60 hover:text-zinc-800 dark:hover:bg-zinc-800 transition cursor-pointer"
             title="السابق"
           >
-            <ChevronLeft className="h-3.5 w-3.5" />
+            <ChevronLeft className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
           </button>
           <button
             type="button"
             onClick={() => setIsVisible(false)}
-            className="rounded p-1 text-zinc-400 hover:bg-zinc-200/60 hover:text-red-600 dark:hover:bg-zinc-800 transition ml-1 cursor-pointer"
+            className="rounded p-1 text-zinc-400 hover:bg-zinc-200/60 hover:text-red-600 dark:hover:bg-zinc-800 transition ml-0.5 sm:ml-1 cursor-pointer"
             title="إخفاء التنبيهات"
           >
-            <X className="h-3.5 w-3.5" />
+            <X className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
           </button>
         </div>
       </div>

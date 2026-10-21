@@ -2198,22 +2198,22 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex flex-col">
       {/* Top Admin Navbar */}
-      <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/90 backdrop-blur-md px-4 sm:px-8 py-3.5 dark:border-zinc-800 dark:bg-zinc-900/90 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-600 text-white shadow-sm">
-            <Building2 className="h-5 w-5" />
+      <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/90 backdrop-blur-md px-3 sm:px-8 py-3 dark:border-zinc-800 dark:bg-zinc-900/90 flex items-center justify-between">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-red-600 text-white shadow-sm">
+            <Building2 className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
           </div>
-          <div>
-            <h1 className="text-base sm:text-lg font-black text-zinc-900 dark:text-zinc-100 tracking-tight">
-              النائب أسماء درويش | مجلس نواب الشعب بالجمهورية التونسية
+          <div className="flex flex-col leading-tight min-w-0">
+            <h1 className="text-sm sm:text-lg font-black text-zinc-900 dark:text-zinc-100 tracking-tight truncate">
+              النائب أسماء درويش
             </h1>
-            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 hidden sm:block">
-              لوحة التحكم والإشراف النيابي المباشر | دائرة منوبة - الدندان
+            <p className="text-[10px] sm:text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 truncate">
+              لوحة التحكم والإشراف النيابي | منوبة - الدندان
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           {/* Active Admin Account Badge */}
           <div className="hidden md:flex items-center gap-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 px-3 py-1.5 border border-zinc-200 dark:border-zinc-700">
             <span className="relative flex h-2 w-2">
@@ -2228,10 +2228,11 @@ export default function AdminDashboard() {
           <a
             href="/"
             target="_blank"
-            className="hidden sm:inline-flex items-center gap-1 text-xs text-zinc-600 hover:text-red-600 dark:text-zinc-400 transition"
+            className="inline-flex items-center gap-1 rounded-xl border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-[11px] sm:text-xs font-semibold text-zinc-700 hover:text-red-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 transition"
           >
-            <span>معاينة واجهة المواطن</span>
-            <ExternalLink className="h-3 w-3" />
+            <span className="hidden sm:inline">معاينة واجهة المواطن</span>
+            <span className="sm:hidden">الرئيسية</span>
+            <ExternalLink className="h-3 w-3 shrink-0" />
           </a>
           <button
             type="button"
@@ -2243,9 +2244,9 @@ export default function AdminDashboard() {
         </div>
       </header>
 
-      {/* Admin Tab Navigation */}
-      <div className="border-b border-zinc-200 bg-white px-4 sm:px-8 dark:border-zinc-800 dark:bg-zinc-900 overflow-x-auto">
-        <div className="flex items-center gap-6 text-xs font-bold whitespace-nowrap min-w-max">
+      {/* Admin Tab Navigation: Smooth horizontal scroll for mobile phones */}
+      <div className="border-b border-zinc-200 bg-white px-3 sm:px-8 dark:border-zinc-800 dark:bg-zinc-900 overflow-x-auto no-scrollbar scroll-smooth">
+        <div className="flex items-center gap-4 sm:gap-6 text-xs font-bold whitespace-nowrap min-w-max">
           <button
             type="button"
             onClick={() => setActiveTab("requests")}
@@ -2382,7 +2383,7 @@ export default function AdminDashboard() {
                 <select
                   value={selectedZone}
                   onChange={(e) => setSelectedZone(e.target.value)}
-                  className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                  className="flex-1 sm:flex-none rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 cursor-pointer"
                 >
                   <option value="الكل">كل العمادات</option>
                   <option value="منوبة المدينة">منوبة المدينة</option>
@@ -2397,7 +2398,7 @@ export default function AdminDashboard() {
                 <select
                   value={selectedStatus}
                   onChange={(e) => setSelectedStatus(e.target.value)}
-                  className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                  className="flex-1 sm:flex-none rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 cursor-pointer"
                 >
                   <option value="الكل">كل الحالات</option>
                   <option value="جديد">جديد</option>
@@ -2712,70 +2713,72 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* Print-Ready Official A4 Letter Preview */}
-            <div className="bg-white text-zinc-950 p-8 sm:p-12 rounded-3xl shadow-xl border border-zinc-300 max-w-4xl mx-auto my-6 print:m-0 print:p-8 print:shadow-none print:border-none font-serif">
-              {/* Official Parliamentary Header */}
-              <div className="flex items-start justify-between border-b-2 border-zinc-900 pb-6 mb-8">
-                <div className="text-right space-y-1">
-                  <p className="font-bold text-sm tracking-wide">الجمهورية التونسية</p>
-                  <p className="font-black text-base">مجلس نواب الشعب</p>
-                  <p className="text-xs text-zinc-700 font-sans font-bold">
-                    المكتب البرلماني للنائب أسماء درويش - دائرة منوبة - الدندان
+            {/* Print-Ready Official A4 Letter Preview: Wrapped in horizontal scroll container for mobile phones */}
+            <div className="w-full overflow-x-auto pb-4">
+              <div className="min-w-[340px] sm:min-w-[640px] max-w-4xl mx-auto bg-white text-zinc-950 p-5 sm:p-12 rounded-2xl sm:rounded-3xl shadow-xl border border-zinc-300 my-4 sm:my-6 print:m-0 print:p-8 print:shadow-none print:border-none font-serif">
+                {/* Official Parliamentary Header */}
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between border-b-2 border-zinc-900 pb-4 sm:pb-6 mb-6 sm:mb-8 gap-3 sm:gap-4">
+                  <div className="text-right space-y-1">
+                    <p className="font-bold text-xs sm:text-sm tracking-wide">الجمهورية التونسية</p>
+                    <p className="font-black text-sm sm:text-base">مجلس نواب الشعب</p>
+                    <p className="text-[11px] sm:text-xs text-zinc-700 font-sans font-bold">
+                      المكتب البرلماني للنائب أسماء درويش - دائرة منوبة - الدندان
+                    </p>
+                  </div>
+
+                  <div className="text-center px-2 sm:px-4">
+                    <div className="inline-flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-full border-2 border-red-600 text-red-600 font-bold text-lg sm:text-xl">
+                      🇹🇳
+                    </div>
+                  </div>
+
+                  <div className="text-right sm:text-left font-mono text-[11px] sm:text-xs space-y-1 text-zinc-700">
+                    <p>تونس في: {letterDate}</p>
+                    <p>العدد: {letterReference}</p>
+                  </div>
+                </div>
+
+                {/* Addressee Block */}
+                <div className="my-6 sm:my-8 text-center sm:text-right">
+                  <p className="text-sm sm:text-base font-bold">إلى جناب:</p>
+                  <p className="text-base sm:text-lg font-black text-zinc-900 mt-1">
+                    {letterRecipient}
                   </p>
                 </div>
 
-                <div className="text-center px-4">
-                  <div className="inline-flex h-12 w-12 items-center justify-center rounded-full border-2 border-red-600 text-red-600 font-bold text-xl">
-                    🇹🇳
+                {/* Subject */}
+                <div className="my-5 sm:my-6 rounded-xl bg-zinc-100/70 p-3 sm:p-4 border border-zinc-200">
+                  <p className="text-xs sm:text-sm font-black">
+                    الموضوع: <span className="font-normal">{letterSubject}</span>
+                  </p>
+                </div>
+
+                {/* Body */}
+                <div className="my-6 sm:my-8 text-xs sm:text-sm leading-relaxed text-justify space-y-4 font-sans">
+                  <textarea
+                    rows={10}
+                    value={letterBody}
+                    onChange={(e) => setLetterBody(e.target.value)}
+                    className="w-full bg-transparent border-0 p-0 text-xs sm:text-sm leading-relaxed focus:outline-none resize-none print:resize-none"
+                  />
+                </div>
+
+                {/* Signature & Stamp */}
+                <div className="mt-12 sm:mt-16 pt-6 sm:pt-8 flex flex-col sm:flex-row items-center sm:items-end justify-between gap-4 text-xs font-sans">
+                  <div className="text-zinc-500 text-center sm:text-right">
+                    <p>المرفقات: نسخة من عريضة المواطن والإحداثيات</p>
                   </div>
-                </div>
 
-                <div className="text-left font-mono text-xs space-y-1 text-zinc-700">
-                  <p>تونس في: {letterDate}</p>
-                  <p>العدد: {letterReference}</p>
-                </div>
-              </div>
-
-              {/* Addressee Block */}
-              <div className="my-8 text-center sm:text-right">
-                <p className="text-base font-bold">إلى جناب:</p>
-                <p className="text-lg font-black text-zinc-900 mt-1">
-                  {letterRecipient}
-                </p>
-              </div>
-
-              {/* Subject */}
-              <div className="my-6 rounded-xl bg-zinc-100/70 p-4 border border-zinc-200">
-                <p className="text-sm font-black">
-                  الموضوع: <span className="font-normal">{letterSubject}</span>
-                </p>
-              </div>
-
-              {/* Body */}
-              <div className="my-8 text-sm leading-relaxed text-justify space-y-4 font-sans">
-                <textarea
-                  rows={10}
-                  value={letterBody}
-                  onChange={(e) => setLetterBody(e.target.value)}
-                  className="w-full bg-transparent border-0 p-0 text-sm leading-relaxed focus:outline-none resize-none print:resize-none"
-                />
-              </div>
-
-              {/* Signature & Stamp */}
-              <div className="mt-16 pt-8 flex items-end justify-between text-xs font-sans">
-                <div className="text-zinc-500">
-                  <p>المرفقات: نسخة من عريضة المواطن والإحداثيات</p>
-                </div>
-
-                <div className="text-center space-y-10">
-                  <div>
-                    <p className="font-bold text-sm">النائب أسماء درويش</p>
-                    <p className="text-xs text-zinc-600 font-sans">نائب الشعب عن دائرة منوبة - الدندان</p>
-                  </div>
-                  <div className="h-14 flex items-center justify-center">
-                    <span className="font-mono text-xs text-zinc-400 italic">
-                      [الإمضاء والختم الرسمي للنائب أسماء درويش]
-                    </span>
+                  <div className="text-center space-y-6 sm:space-y-10">
+                    <div>
+                      <p className="font-bold text-xs sm:text-sm">النائب أسماء درويش</p>
+                      <p className="text-[11px] sm:text-xs text-zinc-600 font-sans">نائب الشعب عن دائرة منوبة - الدندان</p>
+                    </div>
+                    <div className="h-12 sm:h-14 flex items-center justify-center">
+                      <span className="font-mono text-[10px] sm:text-xs text-zinc-400 italic">
+                        [الإمضاء والختم الرسمي للنائب أسماء درويش]
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
