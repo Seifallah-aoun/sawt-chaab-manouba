@@ -2104,12 +2104,12 @@ export default function AdminDashboard() {
           <ThemeToggle />
         </div>
         <div className="w-full max-w-md rounded-3xl bg-white p-6 sm:p-8 shadow-2xl border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800 text-center animate-fadeIn">
-          {/* Official Flag Photo Header */}
-          <div className="mx-auto mb-4 flex h-16 w-24 items-center justify-center rounded-2xl overflow-hidden shadow-lg shadow-red-500/30 border border-red-200 dark:border-red-900 bg-red-600">
+          {/* Official Flag Circular Emblem */}
+          <div className="mx-auto mb-4 flex h-16 w-16 sm:h-20 sm:w-20 items-center justify-center rounded-full overflow-hidden shadow-xl shadow-red-500/25 border-2 border-red-500/40 bg-red-600 ring-4 ring-white/90 dark:ring-zinc-800">
             <img
               src="/tunisia-flag.jpg"
               alt="علم الجمهورية التونسية"
-              className="h-full w-full object-cover"
+              className="h-full w-full object-cover scale-110"
             />
           </div>
 
@@ -2247,21 +2247,21 @@ export default function AdminDashboard() {
       {/* Top Admin Navbar */}
       <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/90 backdrop-blur-md px-3 sm:px-8 py-3 dark:border-zinc-800 dark:bg-zinc-900/90 flex items-center justify-between">
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-          <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl overflow-hidden shadow-sm border border-red-200 dark:border-red-900 bg-red-600">
+          <div className="relative flex h-10 w-10 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-full overflow-hidden shadow-md shadow-red-500/20 border-2 border-red-600/30 dark:border-red-500/50 bg-red-600 ring-2 ring-white/90 dark:ring-zinc-900">
             <img
               src="/tunisia-flag.jpg"
               alt="علم الجمهورية التونسية"
-              className="h-full w-full object-cover"
+              className="h-full w-full object-cover scale-110"
             />
           </div>
           <div className="flex flex-col leading-tight min-w-0">
             <h1 className="text-sm sm:text-lg font-black text-zinc-900 dark:text-zinc-100 tracking-tight truncate flex items-center gap-2">
               <span>النائب أسماء درويش</span>
-              <span className="inline-flex items-center overflow-hidden rounded-xs border border-zinc-200 dark:border-zinc-700 shadow-xs h-3.5 w-5 sm:h-4 sm:w-6 shrink-0">
+              <span className="inline-flex items-center overflow-hidden rounded-full border border-red-300 dark:border-red-800 shadow-xs h-4 w-4 sm:h-4.5 sm:w-4.5 shrink-0 bg-red-600">
                 <img
                   src="/tunisia-flag.jpg"
                   alt="تونس"
-                  className="h-full w-full object-cover"
+                  className="h-full w-full object-cover scale-125"
                 />
               </span>
             </h1>

@@ -12,6 +12,14 @@ const cairo = Cairo({
 export const metadata: Metadata = {
   title: "النائب أسماء درويش | مجلس نواب الشعب بالجمهورية التونسية",
   description: "المنصة الرسمية للنائب أسماء درويش، نائب الشعب عن دائرة معتمدية منوبة - الدندان | مجلس نواب الشعب بالجمهورية التونسية. التواصل المباشر، تقديم العرائض، تسجيل الشكاوى الصوتية، ومتابعة المراسلات الوزارية والمشاريع.",
+  icons: {
+    icon: [
+      { url: "/tunisia-flag.jpg" },
+      { url: "/icon.png" },
+    ],
+    shortcut: "/tunisia-flag.jpg",
+    apple: "/tunisia-flag.jpg",
+  },
 };
 
 export default function RootLayout({

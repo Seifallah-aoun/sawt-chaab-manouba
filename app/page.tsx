@@ -77,21 +77,22 @@ export default function Home() {
       <header className="sticky top-0 z-40 border-b border-zinc-200/80 bg-white/90 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-950/90">
         <div className="container mx-auto flex h-16 max-w-6xl items-center justify-between px-3 sm:px-6">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-            <div className="relative flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl overflow-hidden shadow-sm shadow-red-500/30 border border-red-200 dark:border-red-900/60 bg-red-600">
+            {/* Official Tunisian Flag Circular Emblem */}
+            <div className="relative flex h-10 w-10 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-full overflow-hidden shadow-md shadow-red-500/25 border-2 border-red-600/30 dark:border-red-500/50 bg-red-600 ring-2 ring-white/90 dark:ring-zinc-900">
               <img
                 src="/tunisia-flag.jpg"
                 alt="علم الجمهورية التونسية"
-                className="h-full w-full object-cover"
+                className="h-full w-full object-cover scale-110"
               />
             </div>
             <div className="flex flex-col leading-tight min-w-0">
               <span className="text-sm sm:text-lg font-black text-zinc-900 dark:text-zinc-50 tracking-tight truncate flex items-center gap-2">
                 <span>النائب أسماء درويش</span>
-                <span className="inline-flex items-center overflow-hidden rounded-xs border border-zinc-200 dark:border-zinc-700 shadow-xs h-3.5 w-5 sm:h-4 sm:w-6 shrink-0">
+                <span className="inline-flex items-center overflow-hidden rounded-full border border-red-300 dark:border-red-800 shadow-xs h-4 w-4 sm:h-4.5 sm:w-4.5 shrink-0 bg-red-600">
                   <img
                     src="/tunisia-flag.jpg"
                     alt="تونس"
-                    className="h-full w-full object-cover"
+                    className="h-full w-full object-cover scale-125"
                   />
                 </span>
               </span>
