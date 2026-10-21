@@ -23,6 +23,7 @@ import {
   ManoubaZone
 } from "./types";
 import { isStrictlyRelevantNews } from "./newsFilter";
+import { setStoreItem } from "./platform-store";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const DB_FILE = path.join(DATA_DIR, "db.json");
@@ -240,7 +241,7 @@ export const INITIAL_12_COMPLAINTS: Complaint[] = [
   },
 ];
 
-const INITIAL_PROJECTS: ProjectItem[] = [
+export const INITIAL_PROJECTS: ProjectItem[] = [
   {
     id: "PRJ-01",
     title: "تهيئة وتأهيل شبكة التطهير وتصريف المياه المستعملة بسيدي عمر",
@@ -332,7 +333,7 @@ export const DEFAULT_APPOINTMENT_SETTINGS: AppointmentSettings = {
   note: "تستقبل النائب أسماء درويش والفريق البرلماني المواطنين أيام الإثنين والأربعاء والجمعة بالمكتب البرلماني بمنوبة لتسليم العرائض باليد والاستماع الشخصي لمشاغلكم.",
 };
 
-const INITIAL_APPOINTMENTS: Appointment[] = [
+export const INITIAL_APPOINTMENTS: Appointment[] = [
   {
     id: "RDV-101",
     createdAt: "2026-10-18T11:00:00.000Z",
@@ -359,7 +360,7 @@ const INITIAL_APPOINTMENTS: Appointment[] = [
   },
 ];
 
-const INITIAL_POLLS: PollItem[] = [
+export const INITIAL_POLLS: PollItem[] = [
   {
     id: "POLL-01",
     title: "مشروع تهيئة ساحة السوق القديم بالدندان وتطويرها",
@@ -388,7 +389,7 @@ const INITIAL_POLLS: PollItem[] = [
   },
 ];
 
-const INITIAL_CUSTOM_ALERTS: NewsItem[] = [
+export const INITIAL_CUSTOM_ALERTS: NewsItem[] = [
   {
     id: "alt-custom-1",
     title: "تنبيه SONEDE منوبة: صيانة طارئة بالقناة الرئيسية بسيدي عمر وإعادة الضخ تدريجياً ابتداء من 18:00.",
@@ -421,7 +422,7 @@ const INITIAL_CUSTOM_ALERTS: NewsItem[] = [
   },
 ];
 
-const INITIAL_INGESTED_NEWS: NewsItem[] = [
+export const INITIAL_INGESTED_NEWS: NewsItem[] = [
   {
     id: "ingest-arp-asma-01",
     title: "النائب أسماء درويش تودع سؤالاً كتابياً لوزارة التجهيز والإسكان بخصوص تسريع إتمام منشآت حماية الدندان وقصر السعيد من الفيضانات.",
@@ -925,93 +926,43 @@ export const INITIAL_YOUTH_REQUESTS: YouthRequest[] = [
   },
 ];
 
-export function initDb(): DatabaseSchema {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
+let memoryDbCache: DatabaseSchema | null = null;
 
-  if (fs.existsSync(DB_FILE)) {
-    try {
+export function initDb(): DatabaseSchema {
+  if (memoryDbCache) return memoryDbCache;
+
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      try {
+        fs.mkdirSync(DATA_DIR, { recursive: true });
+      } catch {
+        // read-only filesystem on Vercel
+      }
+    }
+
+    if (fs.existsSync(DB_FILE)) {
       const raw = fs.readFileSync(DB_FILE, "utf-8");
       const parsed = JSON.parse(raw) as DatabaseSchema;
-      let changed = false;
-
-      // Only initialize if undefined, never override user deletions
-      if (parsed.complaints === undefined) {
-        parsed.complaints = INITIAL_12_COMPLAINTS;
-        changed = true;
-      }
-      if (parsed.projects === undefined) {
-        parsed.projects = INITIAL_PROJECTS;
-        changed = true;
-      }
-      if (parsed.appointments === undefined) {
-        parsed.appointments = INITIAL_APPOINTMENTS;
-        changed = true;
-      }
-      if (parsed.appointmentSettings === undefined) {
-        parsed.appointmentSettings = DEFAULT_APPOINTMENT_SETTINGS;
-        changed = true;
-      }
-      if (parsed.polls === undefined) {
-        parsed.polls = INITIAL_POLLS;
-        changed = true;
-      }
-      if (parsed.customAlerts === undefined) {
-        parsed.customAlerts = INITIAL_CUSTOM_ALERTS;
-        changed = true;
-      }
-      if (parsed.ingestedNews === undefined) {
-        parsed.ingestedNews = INITIAL_INGESTED_NEWS;
-        changed = true;
-      }
-      if (parsed.liveStream === undefined) {
-        parsed.liveStream = DEFAULT_LIVE_STREAM;
-        changed = true;
-      }
-      if (parsed.liveChatMessages === undefined) {
-        parsed.liveChatMessages = INITIAL_LIVE_CHAT_MESSAGES;
-        changed = true;
-      }
-      if (!parsed.guides || !Array.isArray(parsed.guides) || parsed.guides.length === 0) {
-        parsed.guides = INITIAL_GUIDES;
-        changed = true;
-      }
-      if (!parsed.youthPrograms || !Array.isArray(parsed.youthPrograms) || parsed.youthPrograms.length === 0) {
-        parsed.youthPrograms = INITIAL_YOUTH_PROGRAMS;
-        changed = true;
-      }
-      if (!parsed.youthRequests || !Array.isArray(parsed.youthRequests)) {
-        parsed.youthRequests = INITIAL_YOUTH_REQUESTS;
-        changed = true;
-      }
-
-      if (changed) {
-        fs.writeFileSync(DB_FILE, JSON.stringify(parsed, null, 2), "utf-8");
-      }
-      return parsed;
-    } catch {
-      const freshData: DatabaseSchema = {
-        complaints: INITIAL_12_COMPLAINTS,
-        projects: INITIAL_PROJECTS,
-        appointments: INITIAL_APPOINTMENTS,
-        appointmentSettings: DEFAULT_APPOINTMENT_SETTINGS,
-        polls: INITIAL_POLLS,
-        customAlerts: INITIAL_CUSTOM_ALERTS,
-        ingestedNews: INITIAL_INGESTED_NEWS,
-        liveStream: DEFAULT_LIVE_STREAM,
-        liveChatMessages: INITIAL_LIVE_CHAT_MESSAGES,
-        guides: INITIAL_GUIDES,
-        youthPrograms: INITIAL_YOUTH_PROGRAMS,
-        youthRequests: INITIAL_YOUTH_REQUESTS,
-        lastIngestionTime: new Date().toISOString(),
-      };
-      fs.writeFileSync(DB_FILE, JSON.stringify(freshData, null, 2), "utf-8");
-      return freshData;
+      if (!parsed.complaints) parsed.complaints = INITIAL_12_COMPLAINTS;
+      if (!parsed.projects) parsed.projects = INITIAL_PROJECTS;
+      if (!parsed.appointments) parsed.appointments = INITIAL_APPOINTMENTS;
+      if (!parsed.appointmentSettings) parsed.appointmentSettings = DEFAULT_APPOINTMENT_SETTINGS;
+      if (!parsed.polls) parsed.polls = INITIAL_POLLS;
+      if (!parsed.customAlerts) parsed.customAlerts = INITIAL_CUSTOM_ALERTS;
+      if (!parsed.ingestedNews) parsed.ingestedNews = INITIAL_INGESTED_NEWS;
+      if (!parsed.liveStream) parsed.liveStream = DEFAULT_LIVE_STREAM;
+      if (!parsed.liveChatMessages) parsed.liveChatMessages = INITIAL_LIVE_CHAT_MESSAGES;
+      if (!parsed.guides) parsed.guides = INITIAL_GUIDES;
+      if (!parsed.youthPrograms) parsed.youthPrograms = INITIAL_YOUTH_PROGRAMS;
+      if (!parsed.youthRequests) parsed.youthRequests = INITIAL_YOUTH_REQUESTS;
+      memoryDbCache = parsed;
+      return memoryDbCache;
     }
+  } catch (fsErr) {
+    // Graceful fallback in serverless read-only environments
   }
 
-  const initialData: DatabaseSchema = {
+  memoryDbCache = {
     complaints: INITIAL_12_COMPLAINTS,
     projects: INITIAL_PROJECTS,
     appointments: INITIAL_APPOINTMENTS,
@@ -1026,8 +977,14 @@ export function initDb(): DatabaseSchema {
     youthRequests: INITIAL_YOUTH_REQUESTS,
     lastIngestionTime: new Date().toISOString(),
   };
-  fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2), "utf-8");
-  return initialData;
+
+  try {
+    fs.writeFileSync(DB_FILE, JSON.stringify(memoryDbCache, null, 2), "utf-8");
+  } catch {
+    // ignore EROFS in serverless environments
+  }
+
+  return memoryDbCache;
 }
 
 export function getDb(): DatabaseSchema {
@@ -1035,10 +992,28 @@ export function getDb(): DatabaseSchema {
 }
 
 export function saveDb(data: DatabaseSchema): void {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+  memoryDbCache = data;
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), "utf-8");
+  } catch {
+    // Gracefully ignore filesystem write errors on Vercel EROFS!
   }
-  fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), "utf-8");
+
+  // Asynchronously persist all collections directly to Supabase platform_store
+  if (data.projects) setStoreItem("projects", data.projects).catch(() => {});
+  if (data.appointments) setStoreItem("appointments", data.appointments).catch(() => {});
+  if (data.appointmentSettings) setStoreItem("appointmentSettings", data.appointmentSettings).catch(() => {});
+  if (data.polls) setStoreItem("polls", data.polls).catch(() => {});
+  if (data.customAlerts) setStoreItem("customAlerts", data.customAlerts).catch(() => {});
+  if (data.ingestedNews) setStoreItem("ingestedNews", data.ingestedNews).catch(() => {});
+  if (data.guides) setStoreItem("guides", data.guides).catch(() => {});
+  if (data.youthPrograms) setStoreItem("youthPrograms", data.youthPrograms).catch(() => {});
+  if (data.youthRequests) setStoreItem("youthRequests", data.youthRequests).catch(() => {});
+  if (data.liveStream) setStoreItem("liveStream", data.liveStream).catch(() => {});
+  if (data.liveChatMessages) setStoreItem("liveChatMessages", data.liveChatMessages).catch(() => {});
 }
 
 export function getAllComplaints(): Complaint[] {

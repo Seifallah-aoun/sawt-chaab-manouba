@@ -3,11 +3,10 @@ import {
   getAllComplaints, 
   getComplaintById, 
   getComplaintsByPhone, 
-  createComplaint, 
-  updateComplaint,
-  deleteComplaint,
-  addProject,
-  INITIAL_12_COMPLAINTS
+  INITIAL_12_COMPLAINTS,
+  INITIAL_PROJECTS,
+  getDb,
+  saveDb
 } from "@/lib/db";
 import { 
   getSupabaseComplaints, 
@@ -16,9 +15,12 @@ import {
   insertSupabaseComplaint, 
   updateSupabaseComplaint, 
   deleteSupabaseComplaint,
-  seedSupabaseIfEmpty 
+  seedSupabaseIfEmpty,
+  toSupabaseRow,
+  fromSupabaseRow
 } from "@/lib/supabase";
-import { Complaint, ComplaintCategory, ComplaintPriority } from "@/lib/types";
+import { getStoreItem, setStoreItem } from "@/lib/platform-store";
+import { Complaint, ComplaintCategory, ComplaintPriority, ProjectItem } from "@/lib/types";
 
 export async function GET(request: NextRequest) {
   try {
@@ -37,7 +39,7 @@ export async function GET(request: NextRequest) {
     if (id) {
       // 1. Try Supabase cloud first
       let complaint: Complaint | null | undefined = await getSupabaseComplaintById(id);
-      // 2. Fallback to local DB
+      // 2. Fallback to local cache if offline
       if (!complaint) {
         complaint = getComplaintById(id);
       }
@@ -53,7 +55,7 @@ export async function GET(request: NextRequest) {
     if (phone) {
       // 1. Try Supabase cloud first
       let complaints = await getSupabaseComplaintsByPhone(phone);
-      // 2. Fallback to local DB if none found
+      // 2. Fallback to local cache if offline
       if (!complaints || complaints.length === 0) {
         complaints = getComplaintsByPhone(phone);
       }
@@ -116,6 +118,7 @@ export async function POST(request: NextRequest) {
       description, 
       type,
       audioBase64, 
+      attachmentName,
       imageBase64, 
       gpsLocation, 
       priority 
@@ -156,27 +159,43 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Save locally to guarantee synchronous unique ID and cache
-    const newComplaint = createComplaint({
-      citizenName,
+    // Generate unique tracking ID formatted as TN-XXXX
+    const ticketId = `TN-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    const newComplaint: Complaint = {
+      id: ticketId,
+      createdAt: new Date().toISOString(),
+      citizenName: citizenName.trim(),
       phone: cleanPhone,
-      zone,
-      category,
+      zone: zone.trim(),
+      category: (category as ComplaintCategory) || "أخرى",
       type: isVoiceMode ? "voice" : "petition",
       description: description?.trim() || (isVoiceMode ? "شكوى صوتية مسجلة من المواطن" : ""),
       audioBase64: audioBase64 || undefined,
+      attachmentName: attachmentName || undefined,
       imageBase64: imageBase64 || undefined,
       gpsLocation: gpsLocation || null,
-      priority: priority || "عادي",
-    });
+      priority: (priority as ComplaintPriority) || "عادي",
+      status: "جديد",
+      adminPublicNote: "تم استلام مطلبكم بنجاح وهو قيد المراجعة الأولية من المكتب البرلماني للنائب أسماء درويش.",
+      publicNote: "تم استلام مطلبكم بنجاح وهو قيد المراجعة الأولية من المكتب البرلماني للنائب أسماء درويش.",
+    };
 
-    // Save to Supabase Cloud
-    let cloudRecord = null;
+    // Save directly to Supabase Cloud
+    let cloudRecord: Complaint | null = null;
     try {
       cloudRecord = await insertSupabaseComplaint(newComplaint);
     } catch (sbErr) {
       console.warn("Could not insert complaint to Supabase:", sbErr);
     }
+
+    // Cache locally in-memory without breaking on Vercel read-only filesystem
+    try {
+      const db = getDb();
+      if (!db.complaints) db.complaints = [];
+      db.complaints.unshift(cloudRecord || newComplaint);
+      saveDb(db);
+    } catch {}
 
     return NextResponse.json(
       {
@@ -201,7 +220,9 @@ export async function PATCH(request: NextRequest) {
     const { 
       id, 
       status, 
+      adminPublicNote,
       publicNote, 
+      officialLetterDraft,
       officialLetterText, 
       targetMinistry, 
       priority,
@@ -216,43 +237,70 @@ export async function PATCH(request: NextRequest) {
 
     const updates = {
       ...(status && { status }),
-      ...(publicNote !== undefined && { publicNote }),
-      ...(officialLetterText !== undefined && { officialLetterText }),
+      adminPublicNote: adminPublicNote !== undefined ? adminPublicNote : publicNote,
+      publicNote: adminPublicNote !== undefined ? adminPublicNote : publicNote,
+      officialLetterDraft: officialLetterDraft !== undefined ? officialLetterDraft : officialLetterText,
+      officialLetterText: officialLetterDraft !== undefined ? officialLetterDraft : officialLetterText,
       ...(targetMinistry !== undefined && { targetMinistry }),
       ...(priority && { priority }),
       ...(publishToProjects !== undefined && { publishedToProjects: publishToProjects }),
     };
 
     // 1. Update Supabase Cloud
-    let cloudUpdated = null;
+    let cloudUpdated: Complaint | null = null;
     try {
       cloudUpdated = await updateSupabaseComplaint(id, updates);
     } catch (sbErr) {
       console.warn("Supabase update error:", sbErr);
     }
 
-    // 2. Update local DB
-    const localUpdated = updateComplaint(id, updates);
+    // 2. Update local in-memory DB
+    let localUpdated: Complaint | null = null;
+    try {
+      const db = getDb();
+      const comp = db.complaints.find((c) => c.id === id);
+      if (comp) {
+        Object.assign(comp, updates);
+        saveDb(db);
+        localUpdated = comp;
+      }
+    } catch {}
 
     const updated = cloudUpdated || localUpdated;
     if (!updated) {
       return NextResponse.json({ error: "المطلب غير موجود." }, { status: 404 });
     }
 
-    // If publishing to projects radar
+    // If publishing to projects radar, save directly into platform_store (zero EROFS errors)
     if (publishToProjects) {
-      addProject({
-        id: `PRJ-${id.replace("TN-", "")}`,
-        title: projectTitle || `متابعة إشكال ${updated.category} بـ ${updated.zone}`,
-        zone: updated.zone,
-        targetMinistry: targetMinistry || updated.targetMinistry || "الجهة الحكومية المختصة",
-        status: status === "تم الحل" ? "تم التدخل" : "في طور الإنجاز",
-        progress: status === "تم الحل" ? 100 : 60,
-        summary: projectSummary || updated.description,
-        officialLetterText: officialLetterText || updated.officialLetterText || "مراسلة برلمانية رسمية من المكتب البرلماني للنائب أسماء درويش.",
-        lastUpdate: "تم التحيين من المكتب البرلماني",
-        relatedComplaintId: id,
-      });
+      try {
+        const currentProjects = await getStoreItem<ProjectItem[]>("projects", INITIAL_PROJECTS);
+        const newProjId = `PRJ-${id.replace("TN-", "")}`;
+        const existingIdx = currentProjects.findIndex((p) => p.id === newProjId || p.relatedComplaintId === id);
+
+        const projectData: ProjectItem = {
+          id: newProjId,
+          title: projectTitle || `متابعة إشكال ${updated.category} بـ ${updated.zone}`,
+          zone: updated.zone,
+          targetMinistry: targetMinistry || updated.targetMinistry || "الجهة الحكومية المختصة",
+          status: status === "تم الحل" ? "تم التدخل" : "في طور الإنجاز",
+          progress: status === "تم الحل" ? 100 : 60,
+          summary: projectSummary || updated.description,
+          officialLetterText: updates.officialLetterDraft || updated.officialLetterDraft || updated.officialLetterText || "مراسلة برلمانية رسمية من المكتب البرلماني للنائب أسماء درويش.",
+          lastUpdate: "تم التحيين من المكتب البرلماني",
+          relatedComplaintId: id,
+        };
+
+        if (existingIdx >= 0) {
+          currentProjects[existingIdx] = { ...currentProjects[existingIdx], ...projectData };
+        } else {
+          currentProjects.unshift(projectData);
+        }
+
+        await setStoreItem("projects", currentProjects);
+      } catch (projErr) {
+        console.warn("Error publishing to projects platform_store:", projErr);
+      }
     }
 
     return NextResponse.json({
@@ -298,8 +346,17 @@ export async function DELETE(request: NextRequest) {
       console.warn("Supabase delete error:", sbErr);
     }
 
-    // 2. Delete from local DB
-    const localDeleted = deleteComplaint(id);
+    // 2. Delete from local in-memory DB
+    let localDeleted = false;
+    try {
+      const db = getDb();
+      const initialLen = db.complaints.length;
+      db.complaints = db.complaints.filter((c) => c.id !== id);
+      if (db.complaints.length !== initialLen) {
+        saveDb(db);
+        localDeleted = true;
+      }
+    } catch {}
 
     if (!sbDeleted && !localDeleted) {
       return NextResponse.json(

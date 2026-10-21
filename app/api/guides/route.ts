@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getGuides, getGuideById, addGuide, updateGuide, deleteGuide } from "@/lib/db";
+import { INITIAL_GUIDES, addGuide, updateGuide, deleteGuide } from "@/lib/db";
+import { getStoreItem, setStoreItem } from "@/lib/platform-store";
 import { GuideItem, GuideCategory, GUIDE_CATEGORIES } from "@/lib/types";
 
 export async function GET(request: NextRequest) {
@@ -8,7 +9,7 @@ export async function GET(request: NextRequest) {
     const query = (searchParams.get("q") || "").trim().toLowerCase();
     const category = (searchParams.get("category") || "").trim();
 
-    let guides = getGuides();
+    let guides = await getStoreItem<GuideItem[]>("guides", INITIAL_GUIDES);
 
     if (category && category !== "الكل") {
       guides = guides.filter((g) => g.category === category);
@@ -79,7 +80,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Process requiredDocuments
     let requiredDocuments: string[] = [];
     if (Array.isArray(body.requiredDocuments)) {
       requiredDocuments = body.requiredDocuments.map((d: any) => String(d).trim()).filter(Boolean);
@@ -97,7 +97,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Process keywords
     let keywords: string[] = [];
     if (Array.isArray(body.keywords)) {
       keywords = body.keywords.map((k: any) => String(k).trim()).filter(Boolean);
@@ -108,7 +107,6 @@ export async function POST(request: NextRequest) {
         .filter(Boolean);
     }
 
-    // Process steps
     let steps: string[] = [];
     if (Array.isArray(body.steps)) {
       steps = body.steps.map((st: any) => String(st).trim()).filter(Boolean);
@@ -123,7 +121,8 @@ export async function POST(request: NextRequest) {
     const processingTime = (body.processingTime || "").trim() || undefined;
     const cost = (body.cost || "").trim() || undefined;
 
-    const newGuide = addGuide({
+    const newGuide: GuideItem = {
+      id: `GD-${Date.now().toString().slice(-4)}`,
       title,
       category,
       keywords,
@@ -134,7 +133,12 @@ export async function POST(request: NextRequest) {
       cost,
       downloadableFormUrl,
       departmentContact: body.departmentContact || undefined,
-    });
+    };
+
+    const currentGuides = await getStoreItem<GuideItem[]>("guides", INITIAL_GUIDES);
+    currentGuides.unshift(newGuide);
+    await setStoreItem("guides", currentGuides);
+    try { addGuide(newGuide); } catch {}
 
     return NextResponse.json(
       {
@@ -165,14 +169,17 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    const existing = getGuideById(id);
-    if (!existing) {
+    const currentGuides = await getStoreItem<GuideItem[]>("guides", INITIAL_GUIDES);
+    const existingIdx = currentGuides.findIndex((g) => g.id.toLowerCase() === id.toLowerCase());
+
+    if (existingIdx === -1) {
       return NextResponse.json(
         { success: false, error: "الإجراء الإداري المطلوب غير موجود." },
         { status: 404 }
       );
     }
 
+    const existing = currentGuides[existingIdx];
     const updates: Partial<GuideItem> = {};
 
     if (body.title !== undefined) updates.title = String(body.title).trim();
@@ -227,7 +234,10 @@ export async function PUT(request: NextRequest) {
       updates.departmentContact = body.departmentContact;
     }
 
-    const updated = updateGuide(id, updates);
+    const updated = { ...existing, ...updates };
+    currentGuides[existingIdx] = updated;
+    await setStoreItem("guides", currentGuides);
+    try { updateGuide(id, updates); } catch {}
 
     return NextResponse.json({
       success: true,
@@ -253,7 +263,7 @@ export async function DELETE(request: NextRequest) {
         const body = await request.json();
         id = body?.id;
       } catch {
-        // ignore body parse failure if not present
+        // ignore
       }
     }
 
@@ -264,13 +274,14 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const deleted = deleteGuide(id);
-    if (!deleted) {
-      return NextResponse.json(
-        { success: false, error: "لم يتم العثور على الإجراء أو تعذر حذفه." },
-        { status: 404 }
-      );
+    const currentGuides = await getStoreItem<GuideItem[]>("guides", INITIAL_GUIDES);
+    const initialLen = currentGuides.length;
+    const filtered = currentGuides.filter((g) => g.id.toLowerCase() !== id!.toLowerCase());
+
+    if (filtered.length !== initialLen) {
+      await setStoreItem("guides", filtered);
     }
+    try { deleteGuide(id); } catch {}
 
     return NextResponse.json({
       success: true,

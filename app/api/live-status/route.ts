@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getLiveStreamConfig, updateLiveStreamConfig } from "@/lib/db";
+import { DEFAULT_LIVE_STREAM, getLiveStreamConfig, updateLiveStreamConfig } from "@/lib/db";
+import { getStoreItem, setStoreItem } from "@/lib/platform-store";
+import { LiveStreamConfig } from "@/lib/types";
 
 export async function GET() {
   try {
-    const config = getLiveStreamConfig();
+    const config = await getStoreItem<LiveStreamConfig>("liveStream", DEFAULT_LIVE_STREAM);
     const isLive = Boolean(config.isLive ?? config.status === "live");
     const streamUrl = config.streamUrl || config.videoUrl || "";
     const liveTitle = config.liveTitle || config.title || "";
@@ -41,7 +43,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
-    const current = getLiveStreamConfig();
+    const current = await getStoreItem<LiveStreamConfig>("liveStream", DEFAULT_LIVE_STREAM);
 
     let targetIsLive = current.isLive ?? current.status === "live";
 
@@ -53,58 +55,61 @@ export async function POST(request: NextRequest) {
       targetIsLive = false;
     }
 
-    const updates: Parameters<typeof updateLiveStreamConfig>[0] = {
+    const updatedConfig: LiveStreamConfig = {
+      ...current,
       isLive: targetIsLive,
       status: targetIsLive ? "live" : "ended",
+      updatedAt: new Date().toISOString(),
     };
 
     if (body.streamUrl !== undefined) {
-      updates.streamUrl = body.streamUrl.trim();
-      updates.videoUrl = body.streamUrl.trim();
+      updatedConfig.streamUrl = body.streamUrl.trim();
+      updatedConfig.videoUrl = body.streamUrl.trim();
     } else if (body.videoUrl !== undefined) {
-      updates.streamUrl = body.videoUrl.trim();
-      updates.videoUrl = body.videoUrl.trim();
+      updatedConfig.streamUrl = body.videoUrl.trim();
+      updatedConfig.videoUrl = body.videoUrl.trim();
     }
 
     if (body.liveTitle !== undefined) {
-      updates.liveTitle = body.liveTitle.trim();
-      updates.title = body.liveTitle.trim();
+      updatedConfig.liveTitle = body.liveTitle.trim();
+      updatedConfig.title = body.liveTitle.trim();
     } else if (body.title !== undefined) {
-      updates.liveTitle = body.title.trim();
-      updates.title = body.title.trim();
+      updatedConfig.liveTitle = body.title.trim();
+      updatedConfig.title = body.title.trim();
     }
 
     if (body.description !== undefined) {
-      updates.description = body.description.trim();
+      updatedConfig.description = body.description.trim();
     }
 
     if (body.scheduledFor !== undefined) {
-      updates.scheduledFor = body.scheduledFor.trim();
+      updatedConfig.scheduledFor = body.scheduledFor.trim();
     }
 
     if (targetIsLive) {
-      updates.startedAt = current.startedAt || new Date().toISOString();
-      updates.viewersCount = body.viewersCount ?? (current.viewersCount || 0);
+      updatedConfig.startedAt = current.startedAt || new Date().toISOString();
+      updatedConfig.viewersCount = body.viewersCount ?? (current.viewersCount || 0);
     } else {
-      updates.viewersCount = 0;
+      updatedConfig.viewersCount = 0;
     }
 
-    const updated = updateLiveStreamConfig(updates);
+    await setStoreItem("liveStream", updatedConfig);
+    try { updateLiveStreamConfig(updatedConfig); } catch {}
 
     return NextResponse.json({
       success: true,
       message: targetIsLive
         ? "تم بدء البث المباشر بنجاح وتحويل الصفحة الرئيسية للبث الحي!"
         : "تم إنهاء البث المباشر بنجاح وإظهار بطاقة الترقب الأنيقة للمواطنين.",
-      isLive: updated.isLive,
-      streamUrl: updated.streamUrl || updated.videoUrl,
-      liveTitle: updated.liveTitle || updated.title,
-      config: updated,
+      isLive: updatedConfig.isLive,
+      streamUrl: updatedConfig.streamUrl || updatedConfig.videoUrl,
+      liveTitle: updatedConfig.liveTitle,
+      config: updatedConfig,
     });
   } catch (error) {
-    console.error("Error in POST /api/live-status:", error);
+    console.error("Error updating live stream status:", error);
     return NextResponse.json(
-      { success: false, error: "حدث خطأ أثناء تعديل حالة البث المباشر." },
+      { success: false, error: "حدث خطأ أثناء تعديل حالة البث." },
       { status: 500 }
     );
   }

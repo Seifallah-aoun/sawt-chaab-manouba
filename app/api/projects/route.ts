@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getProjects, addProject, deleteProject } from "@/lib/db";
+import { INITIAL_PROJECTS, addProject, deleteProject } from "@/lib/db";
+import { getStoreItem, setStoreItem } from "@/lib/platform-store";
 import { ProjectItem } from "@/lib/types";
 
 export async function GET(request: NextRequest) {
   try {
-    const projects = getProjects();
+    const projects = await getStoreItem<ProjectItem[]>("projects", INITIAL_PROJECTS);
     return NextResponse.json(
       { success: true, projects },
       {
@@ -79,13 +80,21 @@ export async function POST(request: NextRequest) {
       budgetEstimate: budgetEstimate || undefined,
     };
 
-    const saved = addProject(newProject);
+    // Save directly to Supabase platform_store (persists across Vercel deployments)
+    const currentProjects = await getStoreItem<ProjectItem[]>("projects", INITIAL_PROJECTS);
+    currentProjects.unshift(newProject);
+    await setStoreItem("projects", currentProjects);
+
+    // Sync in-memory
+    try {
+      addProject(newProject);
+    } catch {}
 
     return NextResponse.json(
       {
         success: true,
         message: "تمت إضافة المشروع بنجاح إلى رادار المشاريع والمساءلة الوزارية.",
-        project: saved,
+        project: newProject,
       },
       { status: 201 }
     );
@@ -119,13 +128,17 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const deleted = deleteProject(id);
-    if (!deleted) {
-      return NextResponse.json(
-        { error: "المشروع غير موجود أو تم حذفه مسبقاً." },
-        { status: 404 }
-      );
+    const currentProjects = await getStoreItem<ProjectItem[]>("projects", INITIAL_PROJECTS);
+    const initialLen = currentProjects.length;
+    const filtered = currentProjects.filter((p) => p.id.toUpperCase() !== id!.toUpperCase());
+
+    if (filtered.length !== initialLen) {
+      await setStoreItem("projects", filtered);
     }
+
+    try {
+      deleteProject(id);
+    } catch {}
 
     return NextResponse.json({
       success: true,

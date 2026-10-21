@@ -571,152 +571,162 @@ export default function CivicModules({ refreshTrigger = 0 }: CivicModulesProps) 
   ];
 
   return (
-    <div className="container mx-auto max-w-6xl px-4 sm:px-6 my-12">
-      {/* 5 Interactive Civic Module Selector Cards: Horizontal Swipeable on Mobile, Responsive Grid on Tablets/Desktop */}
-      <div className="flex overflow-x-auto pb-4 pt-1 -mx-4 px-4 sm:mx-0 sm:px-0 gap-3 snap-x snap-mandatory sm:grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 sm:gap-4 no-scrollbar">
+    <div className="container mx-auto max-w-6xl px-4 sm:px-6 my-10">
+      {/* 5 Interactive Civic Module Selector Cards: Single Row on Desktop (lg:grid-cols-5), Compact Grid on Mobile */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3.5">
         {/* Module 1: Live Analytics */}
         <button
           type="button"
           onClick={() => handleSelectTab("analytics")}
-          className={`min-w-[240px] sm:min-w-0 snap-start shrink-0 sm:shrink group text-right rounded-2xl sm:rounded-3xl p-4 sm:p-6 transition-all border cursor-pointer relative overflow-hidden ${
+          className={`group text-right rounded-2xl p-3 sm:p-3.5 transition-all border cursor-pointer relative overflow-hidden flex flex-col justify-between h-full ${
             activeTab === "analytics"
-              ? "bg-white dark:bg-zinc-900 border-blue-500 shadow-xl ring-2 ring-blue-500/20"
+              ? "bg-white dark:bg-zinc-900 border-blue-500 shadow-lg ring-2 ring-blue-500/20"
               : "bg-white/80 dark:bg-zinc-900/80 border-zinc-200 dark:border-zinc-800 hover:border-blue-300 hover:shadow-md"
           }`}
         >
           {activeTab === "analytics" && (
-            <span className="absolute top-0 right-0 left-0 h-1.5 bg-blue-600" />
+            <span className="absolute top-0 right-0 left-0 h-1 bg-blue-600" />
           )}
-          <div className="mb-3 sm:mb-4 inline-flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl sm:rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400 group-hover:scale-105 transition-transform">
-            <BarChart3 className="h-5 w-5 sm:h-6 sm:w-6" />
-          </div>
-          <div className="flex items-center justify-between mb-1">
-            <h3 className="text-sm sm:text-base font-bold text-zinc-900 dark:text-zinc-100">
-              المرصد الإحصائي المباشر
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="inline-flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400 group-hover:scale-105 transition-transform">
+                <BarChart3 className="h-4 w-4 sm:h-4.5 sm:w-4.5" />
+              </div>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
+                بيانات حية
+              </span>
+            </div>
+            <h3 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate mb-1">
+              المرصد الإحصائي
             </h3>
-            <span className="text-[10px] sm:text-[11px] font-bold text-blue-600 dark:text-blue-400">
-              بيانات حية 100%
-            </span>
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug line-clamp-2">
+              إحصائيات حية وتوزيع المشاغل حسب العمادات
+            </p>
           </div>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed line-clamp-2 sm:line-clamp-none">
-            إحصائيات حية ومباشرة حول توزيع المشاغل حسب العمادات، نسب حل الملفات، وأولويات التدخل بمنوبة والدندان.
-          </p>
         </button>
 
         {/* Module 2: Projects Radar */}
         <button
           type="button"
           onClick={() => handleSelectTab("projects")}
-          className={`min-w-[240px] sm:min-w-0 snap-start shrink-0 sm:shrink group text-right rounded-2xl sm:rounded-3xl p-4 sm:p-6 transition-all border cursor-pointer relative overflow-hidden ${
+          className={`group text-right rounded-2xl p-3 sm:p-3.5 transition-all border cursor-pointer relative overflow-hidden flex flex-col justify-between h-full ${
             activeTab === "projects"
-              ? "bg-white dark:bg-zinc-900 border-amber-500 shadow-xl ring-2 ring-amber-500/20"
+              ? "bg-white dark:bg-zinc-900 border-amber-500 shadow-lg ring-2 ring-amber-500/20"
               : "bg-white/80 dark:bg-zinc-900/80 border-zinc-200 dark:border-zinc-800 hover:border-amber-300 hover:shadow-md"
           }`}
         >
           {activeTab === "projects" && (
-            <span className="absolute top-0 right-0 left-0 h-1.5 bg-amber-500" />
+            <span className="absolute top-0 right-0 left-0 h-1 bg-amber-500" />
           )}
-          <div className="mb-3 sm:mb-4 inline-flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl sm:rounded-2xl bg-amber-50 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400 group-hover:scale-105 transition-transform">
-            <Building2 className="h-5 w-5 sm:h-6 sm:w-6" />
-          </div>
-          <div className="flex items-center justify-between mb-1">
-            <h3 className="text-sm sm:text-base font-bold text-zinc-900 dark:text-zinc-100">
-              رادار المشاريع والمساءلة
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="inline-flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400 group-hover:scale-105 transition-transform">
+                <Building2 className="h-4 w-4 sm:h-4.5 sm:w-4.5" />
+              </div>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300">
+                متابعة وزارية
+              </span>
+            </div>
+            <h3 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate mb-1">
+              رادار المشاريع
             </h3>
-            <span className="text-[10px] sm:text-[11px] font-bold text-amber-600 dark:text-amber-400">
-              متابعة وزارية
-            </span>
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug line-clamp-2">
+              متابعة تقدم المشاريع العمومية والمساءلة
+            </p>
           </div>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed line-clamp-2 sm:line-clamp-none">
-            متابعة حية لنسب تقدم المشاريع العمومية المعطلة بالجهة، والأسئلة الكتابية والشفاهية مع ردودها الرسمية.
-          </p>
         </button>
 
         {/* Module 3: Citizen Guide & Appointments */}
         <button
           type="button"
           onClick={() => handleSelectTab("guide")}
-          className={`min-w-[240px] sm:min-w-0 snap-start shrink-0 sm:shrink group text-right rounded-2xl sm:rounded-3xl p-4 sm:p-6 transition-all border cursor-pointer relative overflow-hidden ${
+          className={`group text-right rounded-2xl p-3 sm:p-3.5 transition-all border cursor-pointer relative overflow-hidden flex flex-col justify-between h-full ${
             activeTab === "guide"
-              ? "bg-white dark:bg-zinc-900 border-emerald-500 shadow-xl ring-2 ring-emerald-500/20"
+              ? "bg-white dark:bg-zinc-900 border-emerald-500 shadow-lg ring-2 ring-emerald-500/20"
               : "bg-white/80 dark:bg-zinc-900/80 border-zinc-200 dark:border-zinc-800 hover:border-emerald-300 hover:shadow-md"
           }`}
         >
           {activeTab === "guide" && (
-            <span className="absolute top-0 right-0 left-0 h-1.5 bg-emerald-500" />
+            <span className="absolute top-0 right-0 left-0 h-1 bg-emerald-500" />
           )}
-          <div className="mb-3 sm:mb-4 inline-flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl sm:rounded-2xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400 group-hover:scale-105 transition-transform">
-            <BookOpen className="h-5 w-5 sm:h-6 sm:w-6" />
-          </div>
-          <div className="flex items-center justify-between mb-1">
-            <h3 className="text-sm sm:text-base font-bold text-zinc-900 dark:text-zinc-100">
-              الدليل الإداري السريع والمواعيد
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="inline-flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400 group-hover:scale-105 transition-transform">
+                <BookOpen className="h-4 w-4 sm:h-4.5 sm:w-4.5" />
+              </div>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+                {guides.length > 0 ? `${guides.length} إجراءات` : "دليل وإجراءات"}
+              </span>
+            </div>
+            <h3 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate mb-1">
+              الدليل والمواعيد
             </h3>
-            <span className="text-[10px] sm:text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
-              {guides.length > 0 ? `${guides.length} إجراءات` : "دليل المواطن"}
-            </span>
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug line-clamp-2">
+              دليل الإجراءات اليومية وحجز موعد بالمكتب
+            </p>
           </div>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed line-clamp-2 sm:line-clamp-none">
-            الدليل الإداري السريع لتسهيل قضاء شؤونك اليومية بمنوبة والدندان (الوثائق، الخطوات، المقرات)، مع حجز موعد مباشر بمكتب النائب أسماء درويش.
-          </p>
         </button>
 
         {/* Module 4: Youth & Entrepreneurship Hub */}
         <button
           type="button"
           onClick={() => handleSelectTab("youth")}
-          className={`min-w-[240px] sm:min-w-0 snap-start shrink-0 sm:shrink group text-right rounded-2xl sm:rounded-3xl p-4 sm:p-6 transition-all border cursor-pointer relative overflow-hidden ${
+          className={`group text-right rounded-2xl p-3 sm:p-3.5 transition-all border cursor-pointer relative overflow-hidden flex flex-col justify-between h-full ${
             activeTab === "youth"
-              ? "bg-white dark:bg-zinc-900 border-indigo-500 shadow-xl ring-2 ring-indigo-500/20"
+              ? "bg-white dark:bg-zinc-900 border-indigo-500 shadow-lg ring-2 ring-indigo-500/20"
               : "bg-white/80 dark:bg-zinc-900/80 border-zinc-200 dark:border-zinc-800 hover:border-indigo-300 hover:shadow-md"
           }`}
         >
           {activeTab === "youth" && (
-            <span className="absolute top-0 right-0 left-0 h-1.5 bg-indigo-600" />
+            <span className="absolute top-0 right-0 left-0 h-1 bg-indigo-600" />
           )}
-          <div className="mb-3 sm:mb-4 inline-flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl sm:rounded-2xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400 group-hover:scale-105 transition-transform">
-            <Rocket className="h-5 w-5 sm:h-6 sm:w-6" />
-          </div>
-          <div className="flex items-center justify-between mb-1">
-            <h3 className="text-sm sm:text-base font-bold text-zinc-900 dark:text-zinc-100">
-              فضاء الشباب والمبادرة
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="inline-flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400 group-hover:scale-105 transition-transform">
+                <Rocket className="h-4 w-4 sm:h-4.5 sm:w-4.5" />
+              </div>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300">
+                {youthPrograms.length > 0 ? `${youthPrograms.length} فرص` : "فرص وتمويل"}
+              </span>
+            </div>
+            <h3 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate mb-1">
+              فضاء الشباب
             </h3>
-            <span className="text-[10px] sm:text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
-              {youthPrograms.length > 0 ? `${youthPrograms.length} فرص` : "فرص وتمويل"}
-            </span>
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug line-clamp-2">
+              برامج التمويل الميسر ومرافقة الباعثين الشبان
+            </p>
           </div>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed line-clamp-2 sm:line-clamp-none">
-            دليل التمويل الميسر، برامج ANETI، مرافقة الباعثين الشبان بمنوبة والدندان ومتابعة الملفات التمويلية المتعطلة.
-          </p>
         </button>
 
         {/* Module 5: Participatory Democracy & Polls */}
         <button
           type="button"
           onClick={() => handleSelectTab("polls")}
-          className={`min-w-[240px] sm:min-w-0 snap-start shrink-0 sm:shrink group text-right rounded-2xl sm:rounded-3xl p-4 sm:p-6 transition-all border cursor-pointer relative overflow-hidden ${
+          className={`col-span-2 sm:col-span-1 lg:col-span-1 group text-right rounded-2xl p-3 sm:p-3.5 transition-all border cursor-pointer relative overflow-hidden flex flex-col justify-between h-full ${
             activeTab === "polls"
-              ? "bg-white dark:bg-zinc-900 border-purple-500 shadow-xl ring-2 ring-purple-500/20"
+              ? "bg-white dark:bg-zinc-900 border-purple-500 shadow-lg ring-2 ring-purple-500/20"
               : "bg-white/80 dark:bg-zinc-900/80 border-zinc-200 dark:border-zinc-800 hover:border-purple-300 hover:shadow-md"
           }`}
         >
           {activeTab === "polls" && (
-            <span className="absolute top-0 right-0 left-0 h-1.5 bg-purple-500" />
+            <span className="absolute top-0 right-0 left-0 h-1 bg-purple-500" />
           )}
-          <div className="mb-3 sm:mb-4 inline-flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl sm:rounded-2xl bg-purple-50 text-purple-600 dark:bg-purple-950/50 dark:text-purple-400 group-hover:scale-105 transition-transform">
-            <Vote className="h-5 w-5 sm:h-6 sm:w-6" />
-          </div>
-          <div className="flex items-center justify-between mb-1">
-            <h3 className="text-sm sm:text-base font-bold text-zinc-900 dark:text-zinc-100">
-              الديمقراطية التشاركية والأخبار
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="inline-flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-purple-50 text-purple-600 dark:bg-purple-950/50 dark:text-purple-400 group-hover:scale-105 transition-transform">
+                <Vote className="h-4 w-4 sm:h-4.5 sm:w-4.5" />
+              </div>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300">
+                استفتاءات حية
+              </span>
+            </div>
+            <h3 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate mb-1">
+              الاستشارات والأخبار
             </h3>
-            <span className="text-[10px] sm:text-[11px] font-bold text-purple-600 dark:text-purple-400">
-              أخبار واستفتاء
-            </span>
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug line-clamp-2">
+              استفتاءات تشاركية ومتابعة المستجدات
+            </p>
           </div>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed line-clamp-2 sm:line-clamp-none">
-            استفتاءات تشاركية ومتابعة حية لآخر الأخبار البرلمانية والجهوية المحدثة تلقائياً عبر الأقمار الإخبارية.
-          </p>
         </button>
       </div>
 

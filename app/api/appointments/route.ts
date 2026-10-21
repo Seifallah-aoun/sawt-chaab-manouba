@@ -1,17 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { 
-  getAppointments, 
+  INITIAL_APPOINTMENTS, 
+  DEFAULT_APPOINTMENT_SETTINGS,
   createAppointment, 
   deleteAppointment, 
   updateAppointmentStatus,
-  getAppointmentSettings,
   updateAppointmentSettings 
 } from "@/lib/db";
+import { getStoreItem, setStoreItem } from "@/lib/platform-store";
+import { Appointment, AppointmentSettings } from "@/lib/types";
 
 export async function GET(request: NextRequest) {
   try {
-    const appointments = getAppointments();
-    const settings = getAppointmentSettings();
+    const appointments = await getStoreItem<Appointment[]>("appointments", INITIAL_APPOINTMENTS);
+    const settings = await getStoreItem<AppointmentSettings>("appointmentSettings", DEFAULT_APPOINTMENT_SETTINGS);
+
     return NextResponse.json(
       { success: true, appointments, settings },
       {
@@ -38,10 +41,19 @@ export async function POST(request: NextRequest) {
     // Check if this is a settings update request
     if (body.action === "update_settings") {
       const { days, timeSlots, note } = body;
-      const updatedSettings = updateAppointmentSettings({ days, timeSlots, note });
+      const currentSettings = await getStoreItem<AppointmentSettings>("appointmentSettings", DEFAULT_APPOINTMENT_SETTINGS);
+      const updatedSettings: AppointmentSettings = {
+        days: Array.isArray(days) ? days : currentSettings.days,
+        timeSlots: Array.isArray(timeSlots) ? timeSlots : currentSettings.timeSlots,
+        note: typeof note === "string" ? note : currentSettings.note,
+      };
+
+      await setStoreItem("appointmentSettings", updatedSettings);
+      try { updateAppointmentSettings(updatedSettings); } catch {}
+
       return NextResponse.json({
         success: true,
-        message: "تم حفظ وتحديث إعدادات وأوقات الاستقبال المباشر بنجاح.",
+        message: "تم حفظ وتحديث إعدادات وأوقات الاستقبال المباشر بنجاح في قاعدة البيانات السحابية.",
         settings: updatedSettings,
       });
     }
@@ -70,14 +82,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const newAppointment = createAppointment({
-      citizenName,
+    const newId = `RDV-${Math.floor(1000 + Math.random() * 9000)}`;
+    const newAppointment: Appointment = {
+      id: newId,
+      createdAt: new Date().toISOString(),
+      citizenName: citizenName.trim(),
       phone: cleanPhone,
-      zone: zone || "منوبة",
+      zone: zone || "منوبة المدينة",
       date,
       timeSlot,
       topic: topic || "مقابلة عامة لمتابعة مشاغل الجهة",
-    });
+      status: "مؤكد",
+      notes: "المكتب البرلماني للنائب أسماء درويش - شارع الحبيب بورقيبة، منوبة",
+    };
+
+    const currentAppointments = await getStoreItem<Appointment[]>("appointments", INITIAL_APPOINTMENTS);
+    currentAppointments.unshift(newAppointment);
+    await setStoreItem("appointments", currentAppointments);
+
+    try { createAppointment(newAppointment); } catch {}
 
     return NextResponse.json(
       {
@@ -108,18 +131,24 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const updated = updateAppointmentStatus(id, status);
-    if (!updated) {
+    const currentAppointments = await getStoreItem<Appointment[]>("appointments", INITIAL_APPOINTMENTS);
+    const target = currentAppointments.find((a) => a.id.toUpperCase() === id.toUpperCase());
+
+    if (!target) {
       return NextResponse.json(
         { error: "الموعد غير موجود." },
         { status: 404 }
       );
     }
 
+    target.status = status;
+    await setStoreItem("appointments", currentAppointments);
+    try { updateAppointmentStatus(id, status); } catch {}
+
     return NextResponse.json({
       success: true,
       message: "تم تحديث حالة الموعد بنجاح.",
-      appointment: updated,
+      appointment: target,
     });
   } catch (error) {
     console.error("Error updating appointment:", error);
@@ -151,41 +180,23 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const deleted = deleteAppointment(id);
-    if (!deleted) {
-      return NextResponse.json(
-        { error: "الموعد غير موجود أو تم حذفه مسبقاً." },
-        { status: 404 }
-      );
+    const currentAppointments = await getStoreItem<Appointment[]>("appointments", INITIAL_APPOINTMENTS);
+    const initialLen = currentAppointments.length;
+    const filtered = currentAppointments.filter((a) => a.id.toUpperCase() !== id!.toUpperCase());
+
+    if (filtered.length !== initialLen) {
+      await setStoreItem("appointments", filtered);
     }
+    try { deleteAppointment(id); } catch {}
 
     return NextResponse.json({
       success: true,
-      message: `تم حذف الموعد (${id}) بنجاح.`,
+      message: `تم حذف الموعد (${id}) بنجاح من قاعدة البيانات.`,
     });
   } catch (error) {
     console.error("Error deleting appointment:", error);
     return NextResponse.json(
       { error: "حدث خطأ أثناء حذف الموعد." },
-      { status: 500 }
-    );
-  }
-}
-
-export async function PUT(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const { days, timeSlots, note } = body;
-    const updatedSettings = updateAppointmentSettings({ days, timeSlots, note });
-    return NextResponse.json({
-      success: true,
-      message: "تم حفظ وتحديث إعدادات وأوقات الاستقبال المباشر بنجاح.",
-      settings: updatedSettings,
-    });
-  } catch (error) {
-    console.error("Error updating appointment settings:", error);
-    return NextResponse.json(
-      { error: "حدث خطأ أثناء تحديث إعدادات المواعيد." },
       { status: 500 }
     );
   }

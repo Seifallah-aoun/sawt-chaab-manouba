@@ -1,18 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { 
-  getLiveStreamConfig, 
-  updateLiveStreamConfig, 
-  getLiveChatMessages, 
-  addLiveChatMessage, 
+  DEFAULT_LIVE_STREAM,
+  INITIAL_LIVE_CHAT_MESSAGES,
   convertChatToComplaint, 
   deleteLiveChatMessage, 
-  togglePinLiveChatMessage 
+  togglePinLiveChatMessage,
+  addLiveChatMessage,
+  updateLiveStreamConfig
 } from "@/lib/db";
+import { getStoreItem, setStoreItem } from "@/lib/platform-store";
+import { LiveChatMessage, LiveStreamConfig } from "@/lib/types";
 
 export async function GET(request: NextRequest) {
   try {
-    const config = getLiveStreamConfig();
-    const messages = getLiveChatMessages();
+    const config = await getStoreItem<LiveStreamConfig>("liveStream", DEFAULT_LIVE_STREAM);
+    const messages = await getStoreItem<LiveChatMessage[]>("liveChatMessages", INITIAL_LIVE_CHAT_MESSAGES);
 
     return NextResponse.json({
       success: true,
@@ -72,24 +74,32 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-      const updated = togglePinLiveChatMessage(messageId);
-      if (!updated) {
+      const currentMessages = await getStoreItem<LiveChatMessage[]>("liveChatMessages", INITIAL_LIVE_CHAT_MESSAGES);
+      const target = currentMessages.find((m) => m.id === messageId);
+      if (!target) {
         return NextResponse.json(
           { error: "الرسالة غير موجودة." },
           { status: 404 }
         );
       }
+      target.isPinned = !target.isPinned;
+      await setStoreItem("liveChatMessages", currentMessages);
+      try { togglePinLiveChatMessage(messageId); } catch {}
+
       return NextResponse.json({
         success: true,
-        message: updated.isPinned ? "تم تثبيت السؤال في البث." : "تم إلغاء التثبيت.",
-        chatMessage: updated,
+        message: target.isPinned ? "تم تثبيت السؤال في البث." : "تم إلغاء التثبيت.",
+        chatMessage: target,
       });
     }
 
     // 3. Update Live Stream Settings
     if (body.action === "update_config" || body.action === "set_live_status") {
       const { title, liveTitle, description, videoUrl, streamUrl, status, isLive, scheduledFor } = body;
-      const updated = updateLiveStreamConfig({
+      const currentConfig = await getStoreItem<LiveStreamConfig>("liveStream", DEFAULT_LIVE_STREAM);
+
+      const updatedConfig: LiveStreamConfig = {
+        ...currentConfig,
         ...(title !== undefined && { title: title.trim(), liveTitle: title.trim() }),
         ...(liveTitle !== undefined && { liveTitle: liveTitle.trim(), title: liveTitle.trim() }),
         ...(description !== undefined && { description: description.trim() }),
@@ -98,12 +108,16 @@ export async function POST(request: NextRequest) {
         ...(status !== undefined && { status }),
         ...(isLive !== undefined && { isLive: Boolean(isLive) }),
         ...(scheduledFor !== undefined && { scheduledFor: scheduledFor.trim() }),
-      });
+        updatedAt: new Date().toISOString(),
+      };
+
+      await setStoreItem("liveStream", updatedConfig);
+      try { updateLiveStreamConfig(updatedConfig); } catch {}
 
       return NextResponse.json({
         success: true,
         message: "تم تحديث إعدادات البث المباشر بنجاح.",
-        config: updated,
+        config: updatedConfig,
       });
     }
 
@@ -131,12 +145,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const createdMsg = addLiveChatMessage({
+    const createdMsg: LiveChatMessage = {
+      id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       citizenName: citizenName.trim(),
       zone: zone.trim(),
       phone: phone ? phone.trim() : undefined,
       message: message.trim(),
-    });
+      createdAt: new Date().toLocaleTimeString("ar-TN", { hour: "2-digit", minute: "2-digit" }),
+      status: "pending",
+      isPinned: false,
+    };
+
+    const currentMessages = await getStoreItem<LiveChatMessage[]>("liveChatMessages", INITIAL_LIVE_CHAT_MESSAGES);
+    currentMessages.unshift(createdMsg);
+    await setStoreItem("liveChatMessages", currentMessages);
+    try { addLiveChatMessage(createdMsg); } catch {}
 
     return NextResponse.json(
       {
@@ -176,13 +199,10 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const deleted = deleteLiveChatMessage(id);
-    if (!deleted) {
-      return NextResponse.json(
-        { error: "الرسالة غير موجودة أو تم حذفها مسبقاً." },
-        { status: 404 }
-      );
-    }
+    const currentMessages = await getStoreItem<LiveChatMessage[]>("liveChatMessages", INITIAL_LIVE_CHAT_MESSAGES);
+    const filtered = currentMessages.filter((m) => m.id !== id);
+    await setStoreItem("liveChatMessages", filtered);
+    try { deleteLiveChatMessage(id); } catch {}
 
     return NextResponse.json({
       success: true,

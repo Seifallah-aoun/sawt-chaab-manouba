@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  getYouthPrograms,
+  INITIAL_YOUTH_PROGRAMS,
+  INITIAL_YOUTH_REQUESTS,
   addYouthProgram,
   deleteYouthProgram,
-  getYouthRequests,
   addYouthRequest,
   updateYouthRequestStatus,
   deleteYouthRequest,
 } from "@/lib/db";
-import { YouthProgramCategory, YOUTH_PROGRAM_CATEGORIES, YouthRequestStatus } from "@/lib/types";
+import { getStoreItem, setStoreItem } from "@/lib/platform-store";
+import { YouthProgram, YouthRequest, YouthProgramCategory, YOUTH_PROGRAM_CATEGORIES, YouthRequestStatus } from "@/lib/types";
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,12 +17,12 @@ export async function GET(request: NextRequest) {
     const category = searchParams.get("category");
     const type = searchParams.get("type"); // "programs" | "requests" | "all"
 
-    let programs = getYouthPrograms();
+    let programs = await getStoreItem<YouthProgram[]>("youthPrograms", INITIAL_YOUTH_PROGRAMS);
     if (category && category !== "الكل") {
       programs = programs.filter((p) => p.category === category);
     }
 
-    const requests = getYouthRequests();
+    const requests = await getStoreItem<YouthRequest[]>("youthRequests", INITIAL_YOUTH_REQUESTS);
 
     if (type === "programs") {
       return NextResponse.json(
@@ -93,7 +94,6 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Process eligibilityCriteria
       let eligibilityCriteria: string[] = [];
       if (Array.isArray(body.eligibilityCriteria)) {
         eligibilityCriteria = body.eligibilityCriteria.map((c: any) => String(c).trim()).filter(Boolean);
@@ -104,7 +104,6 @@ export async function POST(request: NextRequest) {
           .filter(Boolean);
       }
 
-      // Process requiredDocuments
       let requiredDocuments: string[] = [];
       if (Array.isArray(body.requiredDocuments)) {
         requiredDocuments = body.requiredDocuments.map((d: any) => String(d).trim()).filter(Boolean);
@@ -115,7 +114,8 @@ export async function POST(request: NextRequest) {
           .filter(Boolean);
       }
 
-      const newProgram = addYouthProgram({
+      const newProgram: YouthProgram = {
+        id: `YTH-PRG-${Date.now().toString().slice(-4)}`,
         title,
         category,
         institution,
@@ -127,7 +127,12 @@ export async function POST(request: NextRequest) {
         contactPhone: (body.contactPhone || "").trim() || undefined,
         officialUrl: (body.officialUrl || "").trim() || undefined,
         description: description || title,
-      });
+      };
+
+      const currentPrograms = await getStoreItem<YouthProgram[]>("youthPrograms", INITIAL_YOUTH_PROGRAMS);
+      currentPrograms.unshift(newProgram);
+      await setStoreItem("youthPrograms", currentPrograms);
+      try { addYouthProgram(newProgram); } catch {}
 
       return NextResponse.json(
         {
@@ -175,15 +180,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const newRequest = addYouthRequest({
+    const newRequest: YouthRequest = {
+      id: `YTH-${Math.floor(1000 + Math.random() * 9000)}`,
       fullName,
       phone,
       zone,
       projectType,
       targetInstitution,
       issueDescription,
+      status: "جديد",
+      createdAt: new Date().toISOString().split("T")[0],
       notes: body.notes,
-    });
+    };
+
+    const currentRequests = await getStoreItem<YouthRequest[]>("youthRequests", INITIAL_YOUTH_REQUESTS);
+    currentRequests.unshift(newRequest);
+    await setStoreItem("youthRequests", currentRequests);
+    try { addYouthRequest(newRequest); } catch {}
 
     return NextResponse.json(
       {
@@ -229,18 +242,25 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const updated = updateYouthRequestStatus(id, status, notes);
-    if (!updated) {
+    const currentRequests = await getStoreItem<YouthRequest[]>("youthRequests", INITIAL_YOUTH_REQUESTS);
+    const target = currentRequests.find((r) => r.id.toUpperCase() === id.toUpperCase());
+
+    if (!target) {
       return NextResponse.json(
         { success: false, error: "لم يتم العثور على الطلب المطلوب." },
         { status: 404 }
       );
     }
 
+    target.status = status;
+    if (notes !== undefined) target.notes = notes;
+    await setStoreItem("youthRequests", currentRequests);
+    try { updateYouthRequestStatus(id, status, notes); } catch {}
+
     return NextResponse.json({
       success: true,
       message: "تم تحيين حالة الطلب بنجاح.",
-      request: updated,
+      request: target,
     });
   } catch (error) {
     console.error("Error updating youth request status:", error);
@@ -274,18 +294,16 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    let deleted = false;
     if (type === "request") {
-      deleted = deleteYouthRequest(id);
+      const currentRequests = await getStoreItem<YouthRequest[]>("youthRequests", INITIAL_YOUTH_REQUESTS);
+      const filtered = currentRequests.filter((r) => r.id.toUpperCase() !== id!.toUpperCase());
+      await setStoreItem("youthRequests", filtered);
+      try { deleteYouthRequest(id); } catch {}
     } else {
-      deleted = deleteYouthProgram(id);
-    }
-
-    if (!deleted) {
-      return NextResponse.json(
-        { success: false, error: "لم يتم العثور على العنصر أو تعذر حذفه." },
-        { status: 404 }
-      );
+      const currentPrograms = await getStoreItem<YouthProgram[]>("youthPrograms", INITIAL_YOUTH_PROGRAMS);
+      const filtered = currentPrograms.filter((p) => p.id.toUpperCase() !== id!.toUpperCase());
+      await setStoreItem("youthPrograms", filtered);
+      try { deleteYouthProgram(id); } catch {}
     }
 
     return NextResponse.json({

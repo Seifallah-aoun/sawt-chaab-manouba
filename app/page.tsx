@@ -15,6 +15,7 @@ import ComplaintTracker from "@/components/ComplaintTracker";
 import AlertTicker from "@/components/AlertTicker";
 import CivicModules from "@/components/CivicModules";
 import LiveTownHall from "@/components/LiveTownHall";
+import ThemeToggle from "@/components/ThemeToggle";
 
 export default function Home() {
   const [modalOpen, setModalOpen] = useState(false);
@@ -96,6 +97,9 @@ export default function Home() {
               <Send className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-red-600 shrink-0" />
               <span className="whitespace-nowrap">تقديم عريضة</span>
             </button>
+
+            {/* Dark / Light Mode Toggle */}
+            <ThemeToggle />
           </div>
         </div>
       </header>

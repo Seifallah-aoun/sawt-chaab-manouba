@@ -23,41 +23,66 @@ export interface SupabaseRequestRecord {
   official_letter_draft?: string | null;
 }
 
-export function mapRowToComplaint(row: any): Complaint {
+/**
+ * Bidirectional mapper: Supabase snake_case row -> Clean Frontend camelCase Complaint
+ */
+export function fromSupabaseRow(row: any): Complaint {
+  if (!row) return {} as Complaint;
   const isVoice = Boolean(row.audio_base64);
+  const ticketId = row.ticket_id || row.id || `TN-${Math.floor(1000 + Math.random() * 9000)}`;
+  const adminNote = row.admin_public_note ?? undefined;
+  const letterDraft = row.official_letter_draft ?? undefined;
+
   return {
-    id: row.ticket_id || row.id,
+    id: ticketId, // Always formatted as TN-XXXX for frontend tracking & display
     createdAt: row.created_at || new Date().toISOString(),
     citizenName: row.citizen_name || "",
     phone: row.phone || "",
     zone: row.zone || "منوبة المدينة",
     category: (row.category as ComplaintCategory) || "أخرى",
-    description: row.description || "",
+    description: row.description || (isVoice ? "شكوى صوتية مسجلة من المواطن" : ""),
     type: isVoice ? "voice" : "petition",
     audioBase64: row.audio_base64 || undefined,
-    status: (row.status as ComplaintStatus) || "جديد",
+    attachmentName: row.attachment_name || undefined,
     priority: (row.priority as ComplaintPriority) || "عادي",
-    publicNote: row.admin_public_note || undefined,
-    officialLetterText: row.official_letter_draft || undefined,
+    status: (row.status as ComplaintStatus) || "جديد",
+    adminPublicNote: adminNote,
+    publicNote: adminNote, // backwards compatibility
+    officialLetterDraft: letterDraft,
+    officialLetterText: letterDraft, // backwards compatibility
   };
 }
 
-export function mapComplaintToRow(c: Partial<Complaint> & { id: string }): SupabaseRequestRecord {
+/**
+ * Bidirectional mapper: Frontend camelCase Complaint -> Supabase snake_case row
+ */
+export function toSupabaseRow(
+  c: Partial<Complaint> & { id?: string; citizenName?: string }
+): SupabaseRequestRecord {
+  const ticketId = c.id && c.id.startsWith("TN-") ? c.id : (c.id || `TN-${Math.floor(1000 + Math.random() * 9000)}`);
+  const adminNote = c.adminPublicNote !== undefined ? c.adminPublicNote : (c.publicNote !== undefined ? c.publicNote : null);
+  const letterDraft = c.officialLetterDraft !== undefined ? c.officialLetterDraft : (c.officialLetterText !== undefined ? c.officialLetterText : null);
+
   return {
-    ticket_id: c.id,
-    citizen_name: c.citizenName || "",
-    phone: c.phone || "",
-    zone: c.zone || "منوبة المدينة",
+    ticket_id: ticketId,
+    citizen_name: (c.citizenName || "").trim(),
+    phone: (c.phone || "").replace(/\D/g, ""),
+    zone: (c.zone || "منوبة المدينة").trim(),
     category: c.category || "أخرى",
-    description: c.description || (c.type === "voice" ? "شكوى صوتية مسجلة من المواطن" : ""),
+    description: (c.description || (c.type === "voice" || c.audioBase64 ? "شكوى صوتية مسجلة من المواطن" : "")).trim(),
     audio_base64: c.audioBase64 || null,
+    attachment_name: c.attachmentName || null,
     priority: c.priority || "عادي",
     status: c.status || "جديد",
-    admin_public_note: c.publicNote || null,
-    official_letter_draft: c.officialLetterText || null,
-    ...(c.createdAt ? { created_at: c.createdAt } : {}),
+    admin_public_note: adminNote,
+    official_letter_draft: letterDraft,
+    created_at: c.createdAt || new Date().toISOString(),
   };
 }
+
+// Backwards compatibility aliases
+export const mapRowToComplaint = fromSupabaseRow;
+export const mapComplaintToRow = toSupabaseRow;
 
 /**
  * Fetch all complaints from Supabase cloud database
@@ -70,14 +95,14 @@ export async function getSupabaseComplaints(): Promise<Complaint[]> {
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("Supabase getComplaints error:", error);
+      console.error("[supabase] getComplaints error:", error);
       return [];
     }
 
     if (!data) return [];
-    return data.map(mapRowToComplaint);
+    return data.map(fromSupabaseRow);
   } catch (err) {
-    console.error("Supabase query exception:", err);
+    console.error("[supabase] getComplaints exception:", err);
     return [];
   }
 }
@@ -87,20 +112,22 @@ export async function getSupabaseComplaints(): Promise<Complaint[]> {
  */
 export async function getSupabaseComplaintById(id: string): Promise<Complaint | null> {
   try {
-    // Try matching ticket_id first, then id
-    let query = supabase.from("requests").select("*").eq("ticket_id", id).maybeSingle();
+    const cleanId = id.trim();
+    // 1. Try matching ticket_id first
+    let query = supabase.from("requests").select("*").eq("ticket_id", cleanId).maybeSingle();
     let { data, error } = await query;
 
-    if (!data && !error && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
-      const fallback = await supabase.from("requests").select("*").eq("id", id).maybeSingle();
+    // 2. If not found and looks like a UUID, fallback to id column
+    if (!data && !error && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId)) {
+      const fallback = await supabase.from("requests").select("*").eq("id", cleanId).maybeSingle();
       data = fallback.data;
       error = fallback.error;
     }
 
     if (error || !data) return null;
-    return mapRowToComplaint(data);
+    return fromSupabaseRow(data);
   } catch (err) {
-    console.error("Supabase getById exception:", err);
+    console.error("[supabase] getById exception:", err);
     return null;
   }
 }
@@ -111,6 +138,8 @@ export async function getSupabaseComplaintById(id: string): Promise<Complaint | 
 export async function getSupabaseComplaintsByPhone(phone: string): Promise<Complaint[]> {
   try {
     const cleanPhone = phone.replace(/\D/g, "");
+    if (!cleanPhone) return [];
+
     const { data, error } = await supabase
       .from("requests")
       .select("*")
@@ -118,9 +147,9 @@ export async function getSupabaseComplaintsByPhone(phone: string): Promise<Compl
       .order("created_at", { ascending: false });
 
     if (error || !data) return [];
-    return data.map(mapRowToComplaint);
+    return data.map(fromSupabaseRow);
   } catch (err) {
-    console.error("Supabase getByPhone exception:", err);
+    console.error("[supabase] getByPhone exception:", err);
     return [];
   }
 }
@@ -130,7 +159,7 @@ export async function getSupabaseComplaintsByPhone(phone: string): Promise<Compl
  */
 export async function insertSupabaseComplaint(complaint: Complaint): Promise<Complaint | null> {
   try {
-    const row = mapComplaintToRow(complaint);
+    const row = toSupabaseRow(complaint);
     const { data, error } = await supabase
       .from("requests")
       .insert(row)
@@ -138,13 +167,13 @@ export async function insertSupabaseComplaint(complaint: Complaint): Promise<Com
       .single();
 
     if (error) {
-      console.error("Supabase insert error:", error);
+      console.error("[supabase] insert error:", error);
       return null;
     }
 
-    return data ? mapRowToComplaint(data) : complaint;
+    return data ? fromSupabaseRow(data) : complaint;
   } catch (err) {
-    console.error("Supabase insert exception:", err);
+    console.error("[supabase] insert exception:", err);
     return null;
   }
 }
@@ -154,33 +183,59 @@ export async function insertSupabaseComplaint(complaint: Complaint): Promise<Com
  */
 export async function updateSupabaseComplaint(
   id: string,
-  updates: Partial<Complaint>
+  updates: Partial<Complaint> & {
+    adminPublicNote?: string;
+    officialLetterDraft?: string;
+    publicNote?: string;
+    officialLetterText?: string;
+  }
 ): Promise<Complaint | null> {
   try {
+    const cleanId = id.trim();
     const patch: Partial<SupabaseRequestRecord> = {};
+
     if (updates.status !== undefined) patch.status = updates.status;
     if (updates.priority !== undefined) patch.priority = updates.priority;
-    if (updates.publicNote !== undefined) patch.admin_public_note = updates.publicNote;
-    if (updates.officialLetterText !== undefined) patch.official_letter_draft = updates.officialLetterText;
+    if (updates.adminPublicNote !== undefined) patch.admin_public_note = updates.adminPublicNote;
+    else if (updates.publicNote !== undefined) patch.admin_public_note = updates.publicNote;
+    
+    if (updates.officialLetterDraft !== undefined) patch.official_letter_draft = updates.officialLetterDraft;
+    else if (updates.officialLetterText !== undefined) patch.official_letter_draft = updates.officialLetterText;
+
     if (updates.category !== undefined) patch.category = updates.category;
     if (updates.zone !== undefined) patch.zone = updates.zone;
     if (updates.description !== undefined) patch.description = updates.description;
+    if (updates.citizenName !== undefined) patch.citizen_name = updates.citizenName;
+    if (updates.phone !== undefined) patch.phone = updates.phone.replace(/\D/g, "");
 
-    const { data, error } = await supabase
+    // Match ticket_id first
+    let { data, error } = await supabase
       .from("requests")
       .update(patch)
-      .eq("ticket_id", id)
+      .eq("ticket_id", cleanId)
       .select()
       .maybeSingle();
 
+    // If not found and cleanId is a UUID, try id column
+    if (!data && !error && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId)) {
+      const fallback = await supabase
+        .from("requests")
+        .update(patch)
+        .eq("id", cleanId)
+        .select()
+        .maybeSingle();
+      data = fallback.data;
+      error = fallback.error;
+    }
+
     if (error) {
-      console.error("Supabase update error:", error);
+      console.error("[supabase] update error:", error);
       return null;
     }
 
-    return data ? mapRowToComplaint(data) : null;
+    return data ? fromSupabaseRow(data) : null;
   } catch (err) {
-    console.error("Supabase update exception:", err);
+    console.error("[supabase] update exception:", err);
     return null;
   }
 }
@@ -190,19 +245,25 @@ export async function updateSupabaseComplaint(
  */
 export async function deleteSupabaseComplaint(id: string): Promise<boolean> {
   try {
-    const { error } = await supabase
+    const cleanId = id.trim();
+    let { error, count } = await supabase
       .from("requests")
-      .delete()
-      .eq("ticket_id", id);
+      .delete({ count: "exact" })
+      .eq("ticket_id", cleanId);
+
+    if (!error && (count === 0 || count === null) && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId)) {
+      const res = await supabase.from("requests").delete({ count: "exact" }).eq("id", cleanId);
+      error = res.error;
+    }
 
     if (error) {
-      console.error("Supabase delete error:", error);
+      console.error("[supabase] delete error:", error);
       return false;
     }
 
     return true;
   } catch (err) {
-    console.error("Supabase delete exception:", err);
+    console.error("[supabase] delete exception:", err);
     return false;
   }
 }
@@ -217,15 +278,15 @@ export async function seedSupabaseIfEmpty(initialComplaints: Complaint[]): Promi
       .select("id", { count: "exact", head: true });
 
     if (error) {
-      console.error("Supabase count check error:", error);
+      console.error("[supabase] count check error:", error);
       return false;
     }
 
     if (count === 0 && initialComplaints.length > 0) {
-      const rows = initialComplaints.map((c) => mapComplaintToRow(c));
+      const rows = initialComplaints.map((c) => toSupabaseRow(c));
       const { error: insertErr } = await supabase.from("requests").insert(rows);
       if (insertErr) {
-        console.error("Supabase seed insert error:", insertErr);
+        console.error("[supabase] seed insert error:", insertErr);
         return false;
       }
       return true;
@@ -233,7 +294,7 @@ export async function seedSupabaseIfEmpty(initialComplaints: Complaint[]): Promi
 
     return false;
   } catch (err) {
-    console.error("Supabase seed exception:", err);
+    console.error("[supabase] seed exception:", err);
     return false;
   }
 }

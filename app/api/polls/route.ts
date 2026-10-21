@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getPolls, voteInPoll, addPoll, deletePoll } from "@/lib/db";
+import { INITIAL_POLLS, addPoll, deletePoll, voteInPoll } from "@/lib/db";
+import { getStoreItem, setStoreItem } from "@/lib/platform-store";
+import { PollItem } from "@/lib/types";
 
 export async function GET() {
   try {
-    const polls = getPolls();
+    const polls = await getStoreItem<PollItem[]>("polls", INITIAL_POLLS);
     return NextResponse.json({ success: true, polls });
   } catch (error) {
     console.error("Error fetching polls:", error);
@@ -28,7 +30,6 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Default Yes/No legislative voting options if custom options are not provided
       const defaultOptions = [
         { id: "yes", label: "نعم / أوافق (مع)", votes: 0 },
         { id: "no", label: "لا / أرفض (ضد)", votes: 0 },
@@ -42,13 +43,20 @@ export async function POST(request: NextRequest) {
           }))
         : defaultOptions;
 
-      const newPoll = addPoll({
+      const newPoll: PollItem = {
+        id: `POL-${Date.now().toString().slice(-4)}`,
         title: title.trim(),
         zone: zone || "دائرة منوبة - الدندان",
         description: description || `استشارة تشريعية موجهة لمتساكني ${zone || "دائرة منوبة - الدندان"} لإبداء الرأي.`,
         options: finalOptions,
+        totalVotes: 0,
         endDate: endDate || "31 ديسمبر 2026",
-      });
+      };
+
+      const currentPolls = await getStoreItem<PollItem[]>("polls", INITIAL_POLLS);
+      currentPolls.unshift(newPoll);
+      await setStoreItem("polls", currentPolls);
+      try { addPoll(newPoll); } catch {}
 
       return NextResponse.json({
         success: true,
@@ -66,18 +74,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const updatedPoll = voteInPoll(pollId, optionId);
-    if (!updatedPoll) {
+    const currentPolls = await getStoreItem<PollItem[]>("polls", INITIAL_POLLS);
+    const targetPoll = currentPolls.find((p) => p.id === pollId);
+    if (!targetPoll) {
       return NextResponse.json(
-        { error: "الاستشارة أو الخيار غير موجود." },
+        { error: "الاستشارة غير موجودة." },
         { status: 404 }
       );
     }
 
+    const targetOpt = targetPoll.options.find((o) => o.id === optionId);
+    if (!targetOpt) {
+      return NextResponse.json(
+        { error: "الخيار غير موجود." },
+        { status: 404 }
+      );
+    }
+
+    targetOpt.votes += 1;
+    targetPoll.totalVotes = targetPoll.options.reduce((acc, opt) => acc + opt.votes, 0);
+
+    await setStoreItem("polls", currentPolls);
+    try { voteInPoll(pollId, optionId); } catch {}
+
     return NextResponse.json({
       success: true,
       message: "تم تسجيل صوتك بنجاح، شكراً لمشاركتك المواطنية!",
-      poll: updatedPoll,
+      poll: targetPoll,
     });
   } catch (error) {
     console.error("Error submitting poll action:", error);
@@ -109,17 +132,18 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const deleted = deletePoll(id);
-    if (!deleted) {
-      return NextResponse.json(
-        { error: "الاستشارة غير موجودة أو تم حذفها مسبقاً." },
-        { status: 404 }
-      );
+    const currentPolls = await getStoreItem<PollItem[]>("polls", INITIAL_POLLS);
+    const initialLen = currentPolls.length;
+    const filtered = currentPolls.filter((p) => p.id.toUpperCase() !== id!.toUpperCase());
+
+    if (filtered.length !== initialLen) {
+      await setStoreItem("polls", filtered);
     }
+    try { deletePoll(id); } catch {}
 
     return NextResponse.json({
       success: true,
-      message: `تم حذف الاستشارة (${id}) بنجاح.`,
+      message: `تم حذف الاستشارة (${id}) بنجاح من قاعدة البيانات.`,
     });
   } catch (error) {
     console.error("Error deleting poll:", error);

@@ -79,6 +79,7 @@ import {
   YouthRequestStatus
 } from "@/lib/types";
 import { notifyDataChanged } from "@/lib/sync";
+import ThemeToggle from "@/components/ThemeToggle";
 
 const DAY_PRESETS = [
   "الإثنين (10:00 - 13:00)",
@@ -2065,7 +2066,10 @@ export default function AdminDashboard() {
   // Admin Login Screen
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-b from-zinc-100 via-zinc-50 to-zinc-200 dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950">
+      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-b from-zinc-100 via-zinc-50 to-zinc-200 dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950 relative">
+        <div className="absolute top-4 left-4 sm:top-6 sm:left-6 flex items-center gap-2">
+          <ThemeToggle />
+        </div>
         <div className="w-full max-w-md rounded-3xl bg-white p-6 sm:p-8 shadow-2xl border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800 text-center animate-fadeIn">
           {/* Official Emblem / Header */}
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-red-600 text-white shadow-lg shadow-red-500/30">
@@ -2234,6 +2238,7 @@ export default function AdminDashboard() {
             <span className="sm:hidden">الرئيسية</span>
             <ExternalLink className="h-3 w-3 shrink-0" />
           </a>
+          <ThemeToggle />
           <button
             type="button"
             onClick={handleLogout}

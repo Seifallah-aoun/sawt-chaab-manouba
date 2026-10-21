@@ -47,11 +47,14 @@ export interface Complaint {
   type?: ComplaintType;
   audioBase64?: string; // Voice recording
   imageBase64?: string; // Photo / document attachment
+  attachmentName?: string; // Document filename
   gpsLocation?: GPSLocation | null;
   status: ComplaintStatus;
   priority: ComplaintPriority;
-  publicNote?: string; // Note from MP to the citizen
-  officialLetterText?: string; // Official correspondence text
+  adminPublicNote?: string; // Direct note from MP to citizen
+  publicNote?: string; // Note from MP to the citizen (alias)
+  officialLetterDraft?: string; // Official correspondence draft
+  officialLetterText?: string; // Official correspondence text (alias)
   targetMinistry?: string; // Target ministry/institution
   publishedToProjects?: boolean; // Published to projects radar
 }
