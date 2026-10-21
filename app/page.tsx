@@ -57,12 +57,13 @@ export default function Home() {
       <header className="sticky top-0 z-40 border-b border-zinc-200/80 bg-white/90 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-950/90">
         <div className="container mx-auto flex h-16 max-w-6xl items-center justify-between px-3 sm:px-6">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-            <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-red-600 text-white shadow-sm shadow-red-500/30">
-              <Building2 className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
+            <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-red-600 text-white shadow-sm shadow-red-500/30 text-base sm:text-lg select-none">
+              🇹🇳
             </div>
             <div className="flex flex-col leading-tight min-w-0">
-              <span className="text-sm sm:text-lg font-black text-zinc-900 dark:text-zinc-50 tracking-tight truncate">
-                النائب أسماء درويش
+              <span className="text-sm sm:text-lg font-black text-zinc-900 dark:text-zinc-50 tracking-tight truncate flex items-center gap-1.5">
+                <span>النائب أسماء درويش</span>
+                <span className="text-xs sm:text-sm">🇹🇳</span>
               </span>
               <span className="text-[10px] sm:text-xs font-semibold text-zinc-500 dark:text-zinc-400 truncate">
                 مجلس نواب الشعب | منوبة - الدندان

@@ -2105,12 +2105,12 @@ export default function AdminDashboard() {
         </div>
         <div className="w-full max-w-md rounded-3xl bg-white p-6 sm:p-8 shadow-2xl border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800 text-center animate-fadeIn">
           {/* Official Emblem / Header */}
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-red-600 text-white shadow-lg shadow-red-500/30">
-            <Building2 className="h-8 w-8" />
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-red-600 text-white shadow-lg shadow-red-500/30 text-3xl select-none">
+            🇹🇳
           </div>
 
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-red-50 border border-red-200 px-3 py-1 text-[11px] font-bold text-red-700 dark:bg-red-950/40 dark:border-red-900 dark:text-red-300 mb-2">
-            <ShieldCheck className="h-3.5 w-3.5 text-red-600" />
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-red-50 border border-red-200 px-3.5 py-1 text-[11px] font-bold text-red-700 dark:bg-red-950/40 dark:border-red-900 dark:text-red-300 mb-2">
+            <span>🇹🇳</span>
             <span>مجلس نواب الشعب | الجمهورية التونسية</span>
           </div>
 
@@ -2237,15 +2237,16 @@ export default function AdminDashboard() {
       {/* Top Admin Navbar */}
       <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/90 backdrop-blur-md px-3 sm:px-8 py-3 dark:border-zinc-800 dark:bg-zinc-900/90 flex items-center justify-between">
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-          <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-red-600 text-white shadow-sm">
-            <Building2 className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
+          <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-red-600 text-white shadow-sm text-base sm:text-lg select-none">
+            🇹🇳
           </div>
           <div className="flex flex-col leading-tight min-w-0">
-            <h1 className="text-sm sm:text-lg font-black text-zinc-900 dark:text-zinc-100 tracking-tight truncate">
-              النائب أسماء درويش
+            <h1 className="text-sm sm:text-lg font-black text-zinc-900 dark:text-zinc-100 tracking-tight truncate flex items-center gap-1.5">
+              <span>النائب أسماء درويش</span>
+              <span className="text-xs sm:text-sm">🇹🇳</span>
             </h1>
             <p className="text-[10px] sm:text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 truncate">
-              لوحة التحكم والإشراف النيابي | منوبة - الدندان
+              مجلس نواب الشعب | منوبة - الدندان
             </p>
           </div>
         </div>
