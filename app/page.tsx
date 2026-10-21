@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   Building2, 
   Send, 
@@ -16,11 +16,31 @@ import AlertTicker from "@/components/AlertTicker";
 import CivicModules from "@/components/CivicModules";
 import LiveTownHall from "@/components/LiveTownHall";
 import ThemeToggle from "@/components/ThemeToggle";
+import AIChatWidget from "@/components/AIChatWidget";
 
 export default function Home() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<ModalMode>("petition");
   const [trackedId, setTrackedId] = useState<string>("");
+
+  useEffect(() => {
+    const handleOpenPetition = () => {
+      setModalMode("petition");
+      setModalOpen(true);
+    };
+    const handleOpenVoice = () => {
+      setModalMode("voice");
+      setModalOpen(true);
+    };
+
+    window.addEventListener("open-petition-modal", handleOpenPetition);
+    window.addEventListener("open-voice-modal", handleOpenVoice);
+
+    return () => {
+      window.removeEventListener("open-petition-modal", handleOpenPetition);
+      window.removeEventListener("open-voice-modal", handleOpenVoice);
+    };
+  }, []);
 
   const openPetitionModal = () => {
     setModalMode("petition");
@@ -216,6 +236,9 @@ export default function Home() {
         mode={modalMode}
         onTrackComplaint={handleTrackNewComplaint}
       />
+
+      {/* Floating AI Chatbot Assistant for Citizens */}
+      <AIChatWidget />
     </div>
   );
 }

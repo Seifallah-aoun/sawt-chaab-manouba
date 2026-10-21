@@ -24,3 +24,11 @@ body {
   color: var(--foreground);
   min-height: 100vh;
 }
+
+/* Hide Next.js dev overlay indicator and badges */
+nextjs-portal,
+#__next-build-watcher,
+[data-nextjs-toast],
+[data-nextjs-dialog-overlay] {
+  display: none !important;
+}
