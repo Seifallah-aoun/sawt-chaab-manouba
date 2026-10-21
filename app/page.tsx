@@ -57,13 +57,23 @@ export default function Home() {
       <header className="sticky top-0 z-40 border-b border-zinc-200/80 bg-white/90 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-950/90">
         <div className="container mx-auto flex h-16 max-w-6xl items-center justify-between px-3 sm:px-6">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-            <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-red-600 text-white shadow-sm shadow-red-500/30 text-base sm:text-lg select-none">
-              🇹🇳
+            <div className="relative flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl overflow-hidden shadow-sm shadow-red-500/30 border border-red-200 dark:border-red-900/60 bg-red-600">
+              <img
+                src="/tunisia-flag.jpg"
+                alt="علم الجمهورية التونسية"
+                className="h-full w-full object-cover"
+              />
             </div>
             <div className="flex flex-col leading-tight min-w-0">
-              <span className="text-sm sm:text-lg font-black text-zinc-900 dark:text-zinc-50 tracking-tight truncate flex items-center gap-1.5">
+              <span className="text-sm sm:text-lg font-black text-zinc-900 dark:text-zinc-50 tracking-tight truncate flex items-center gap-2">
                 <span>النائب أسماء درويش</span>
-                <span className="text-xs sm:text-sm">🇹🇳</span>
+                <span className="inline-flex items-center overflow-hidden rounded-xs border border-zinc-200 dark:border-zinc-700 shadow-xs h-3.5 w-5 sm:h-4 sm:w-6 shrink-0">
+                  <img
+                    src="/tunisia-flag.jpg"
+                    alt="تونس"
+                    className="h-full w-full object-cover"
+                  />
+                </span>
               </span>
               <span className="text-[10px] sm:text-xs font-semibold text-zinc-500 dark:text-zinc-400 truncate">
                 مجلس نواب الشعب | منوبة - الدندان
@@ -174,8 +184,12 @@ export default function Home() {
       <footer className="border-t border-zinc-200 bg-white py-8 dark:border-zinc-800 dark:bg-zinc-950">
         <div className="container mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 text-center sm:flex-row sm:text-right">
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-600 text-white font-bold text-xs">
-              🇹🇳
+            <div className="flex h-8 w-11 shrink-0 items-center justify-center rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-800 shadow-xs">
+              <img
+                src="/tunisia-flag.jpg"
+                alt="الجمهورية التونسية"
+                className="h-full w-full object-cover"
+              />
             </div>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
               جميع الحقوق محفوظة © 2026 - المكتب البرلماني للنائب أسماء درويش، دائرة معتمدية منوبة - الدندان | مجلس نواب الشعب بالجمهورية التونسية
