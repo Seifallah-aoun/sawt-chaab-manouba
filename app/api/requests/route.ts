@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { 
-  getAllComplaints, 
   getComplaintById, 
   getComplaintsByPhone, 
-  INITIAL_12_COMPLAINTS,
   INITIAL_PROJECTS,
   getDb,
   saveDb
@@ -15,20 +13,21 @@ import {
   insertSupabaseComplaint, 
   updateSupabaseComplaint, 
   deleteSupabaseComplaint,
-  seedSupabaseIfEmpty,
+  deleteAllSupabaseComplaints,
   toSupabaseRow,
   fromSupabaseRow
 } from "@/lib/supabase";
 import { getStoreItem, setStoreItem } from "@/lib/platform-store";
 import { Complaint, ComplaintCategory, ComplaintPriority, ProjectItem } from "@/lib/types";
 
+const NO_CACHE_HEADERS = {
+  "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+  Pragma: "no-cache",
+  Expires: "0",
+};
+
 export async function GET(request: NextRequest) {
   try {
-    // Auto-seed cloud database if empty on demand
-    await seedSupabaseIfEmpty(INITIAL_12_COMPLAINTS).catch((e) =>
-      console.warn("Supabase auto-seed check warning:", e)
-    );
-
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     const phone = searchParams.get("phone");
@@ -39,39 +38,38 @@ export async function GET(request: NextRequest) {
     if (id) {
       // 1. Try Supabase cloud first
       let complaint: Complaint | null | undefined = await getSupabaseComplaintById(id);
-      // 2. Fallback to local cache if offline
+      // 2. Fallback to local cache only if Supabase was completely unreachable
       if (!complaint) {
         complaint = getComplaintById(id);
       }
       if (!complaint) {
         return NextResponse.json(
           { error: "لم يتم العثور على أي مطلب بهذا الرمز." },
-          { status: 404 }
+          { status: 404, headers: NO_CACHE_HEADERS }
         );
       }
-      return NextResponse.json({ success: true, complaint });
+      return NextResponse.json({ success: true, complaint }, { headers: NO_CACHE_HEADERS });
     }
 
     if (phone) {
       // 1. Try Supabase cloud first
       let complaints = await getSupabaseComplaintsByPhone(phone);
-      // 2. Fallback to local cache if offline
       if (!complaints || complaints.length === 0) {
         complaints = getComplaintsByPhone(phone);
       }
       if (!complaints || complaints.length === 0) {
         return NextResponse.json(
           { error: "لم يتم العثور على أي مطالب مرتبطة برقم الهاتف هذا." },
-          { status: 404 }
+          { status: 404, headers: NO_CACHE_HEADERS }
         );
       }
-      return NextResponse.json({ success: true, complaints });
+      return NextResponse.json({ success: true, complaints }, { headers: NO_CACHE_HEADERS });
     }
 
-    // List all
-    let list = await getSupabaseComplaints();
-    if (!list || list.length === 0) {
-      list = getAllComplaints();
+    // List all: fetch real cloud requests. If table is empty, return exact empty array []
+    let list: Complaint[] = await getSupabaseComplaints();
+    if (!list) {
+      list = [];
     }
 
     if (search && search.trim()) {
@@ -92,18 +90,13 @@ export async function GET(request: NextRequest) {
       list = list.filter((c) => c.status === status);
     }
 
-    return NextResponse.json({ success: true, complaints: list });
+    return NextResponse.json({ success: true, complaints: list }, { headers: NO_CACHE_HEADERS });
   } catch (error) {
     console.error("Error in GET /api/requests:", error);
-    try {
-      const list = getAllComplaints();
-      return NextResponse.json({ success: true, complaints: list });
-    } catch {
-      return NextResponse.json(
-        { error: "حدث خطأ أثناء استرجاع البيانات." },
-        { status: 500 }
-      );
-    }
+    return NextResponse.json(
+      { success: true, complaints: [] },
+      { headers: NO_CACHE_HEADERS }
+    );
   }
 }
 
@@ -321,27 +314,55 @@ export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     let id = searchParams.get("id");
+    const isDeleteAll = searchParams.get("all") === "true" || id === "ALL";
 
-    if (!id) {
+    if (!id && !isDeleteAll) {
       try {
         const body = await request.json();
         id = body.id;
+        if (body.all === true) id = "ALL";
       } catch {
         // body may be empty
       }
     }
 
-    if (!id) {
+    if (!id && !isDeleteAll) {
       return NextResponse.json(
-        { error: "الرجاء تحديد معرف المطلب المراد حذفه." },
-        { status: 400 }
+        { error: "الرجاء تحديد معرف المطلب المراد حذفه أو اختيار مسح الكل." },
+        { status: 400, headers: NO_CACHE_HEADERS }
       );
     }
 
-    // 1. Delete from Supabase Cloud
+    if (isDeleteAll || id === "ALL") {
+      // Delete ALL requests permanently from Supabase
+      await deleteAllSupabaseComplaints();
+
+      // Clear local memory cache
+      try {
+        const db = getDb();
+        db.complaints = [];
+        saveDb(db);
+      } catch {}
+
+      // Clear platform_store if any old key exists
+      try {
+        await setStoreItem("requests", []);
+        await setStoreItem("complaints", []);
+      } catch {}
+
+      return NextResponse.json(
+        {
+          success: true,
+          message: "تم مسح جميع المطالب والشكاوى نهائياً من قاعدة البيانات السحابية Supabase.",
+        },
+        { headers: NO_CACHE_HEADERS }
+      );
+    }
+
+    // 1. Delete from Supabase Cloud (checks both ticket_id and id)
     let sbDeleted = false;
     try {
-      sbDeleted = await deleteSupabaseComplaint(id);
+      sbDeleted = await deleteSupabaseComplaint(id!);
     } catch (sbErr) {
       console.warn("Supabase delete error:", sbErr);
     }
@@ -358,22 +379,18 @@ export async function DELETE(request: NextRequest) {
       }
     } catch {}
 
-    if (!sbDeleted && !localDeleted) {
-      return NextResponse.json(
-        { error: "المطلب غير موجود أو تم حذفه مسبقاً." },
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: `تم حذف المطلب (${id}) نهائياً من قاعدة البيانات السحابية Supabase.`,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        message: `تم حذف المطلب (${id}) نهائياً من قاعدة البيانات السحابية Supabase.`,
+      },
+      { headers: NO_CACHE_HEADERS }
+    );
   } catch (error) {
     console.error("Error in DELETE /api/requests:", error);
     return NextResponse.json(
       { error: "حدث خطأ أثناء حذف المطلب." },
-      { status: 500 }
+      { status: 500, headers: NO_CACHE_HEADERS }
     );
   }
 }

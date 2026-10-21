@@ -258,24 +258,13 @@
     "status": "ended",
     "scheduledFor": "الآن مباشر",
     "viewersCount": 0,
-    "updatedAt": "2026-10-21T15:26:44.007Z",
+    "updatedAt": "2026-10-21T22:00:51.837Z",
     "isLive": false,
     "streamUrl": "webrtc:in-app",
     "liveTitle": "???? ???? ????? ?? ?????? ????? ?????",
     "startedAt": "2026-10-20T13:43:00.138Z"
   },
-  "liveChatMessages": [
-    {
-      "id": "chat-9978",
-      "citizenName": "seif aoun",
-      "zone": "سيدي عمر",
-      "message": "me dhaw",
-      "createdAt": "2026-10-20T21:28:19.978Z",
-      "status": "converted",
-      "isConvertedToComplaint": true,
-      "complaintId": "TN-6225"
-    }
-  ],
+  "liveChatMessages": [],
   "guides": [
     {
       "id": "guide-01",

@@ -241,27 +241,39 @@ export async function updateSupabaseComplaint(
 }
 
 /**
- * Delete a complaint in Supabase
+ * Delete a complaint in Supabase permanently (checks ticket_id and id)
  */
 export async function deleteSupabaseComplaint(id: string): Promise<boolean> {
   try {
     const cleanId = id.trim();
-    let { error, count } = await supabase
+    if (!cleanId) return false;
+
+    // Delete by ticket_id first
+    const { error: err1, count: count1 } = await supabase
       .from("requests")
       .delete({ count: "exact" })
       .eq("ticket_id", cleanId);
 
-    if (!error && (count === 0 || count === null) && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId)) {
-      const res = await supabase.from("requests").delete({ count: "exact" }).eq("id", cleanId);
-      error = res.error;
+    // If not deleted by ticket_id, try deleting by UUID id
+    if (!err1 && (count1 === 0 || count1 === null)) {
+      const { error: err2, count: count2 } = await supabase
+        .from("requests")
+        .delete({ count: "exact" })
+        .eq("id", cleanId);
+      
+      if (err2) {
+        console.error("[supabase] delete by id error:", err2);
+        return false;
+      }
+      return (count2 ?? 0) > 0;
     }
 
-    if (error) {
-      console.error("[supabase] delete error:", error);
+    if (err1) {
+      console.error("[supabase] delete by ticket_id error:", err1);
       return false;
     }
 
-    return true;
+    return (count1 ?? 0) > 0;
   } catch (err) {
     console.error("[supabase] delete exception:", err);
     return false;
@@ -269,32 +281,32 @@ export async function deleteSupabaseComplaint(id: string): Promise<boolean> {
 }
 
 /**
- * Auto-seed initial complaints to Supabase if the table is empty
+ * Permanently delete ALL complaints from Supabase requests table
  */
-export async function seedSupabaseIfEmpty(initialComplaints: Complaint[]): Promise<boolean> {
+export async function deleteAllSupabaseComplaints(): Promise<boolean> {
   try {
-    const { count, error } = await supabase
+    // Delete all records where ticket_id is not empty
+    const { error } = await supabase
       .from("requests")
-      .select("id", { count: "exact", head: true });
+      .delete()
+      .neq("ticket_id", "____NEVER_MATCH____");
 
     if (error) {
-      console.error("[supabase] count check error:", error);
+      console.error("[supabase] deleteAll complaints error:", error);
       return false;
     }
 
-    if (count === 0 && initialComplaints.length > 0) {
-      const rows = initialComplaints.map((c) => toSupabaseRow(c));
-      const { error: insertErr } = await supabase.from("requests").insert(rows);
-      if (insertErr) {
-        console.error("[supabase] seed insert error:", insertErr);
-        return false;
-      }
-      return true;
-    }
-
-    return false;
+    return true;
   } catch (err) {
-    console.error("[supabase] seed exception:", err);
+    console.error("[supabase] deleteAll complaints exception:", err);
     return false;
   }
+}
+
+/**
+ * Auto-seed initial complaints - DISABLED
+ * Never re-seed deleted citizen requests under any circumstances.
+ */
+export async function seedSupabaseIfEmpty(): Promise<boolean> {
+  return false;
 }

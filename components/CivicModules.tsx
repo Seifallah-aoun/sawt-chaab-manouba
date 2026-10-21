@@ -162,10 +162,10 @@ export default function CivicModules({ refreshTrigger = 0 }: CivicModulesProps) 
   // Fetch real-time data from backend APIs
   const fetchAllData = useCallback(() => {
     setLoadingRequests(true);
-    fetch("/api/requests")
+    fetch(`/api/requests?t=${Date.now()}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
-        if (d.complaints) setRequests(d.complaints);
+        setRequests(Array.isArray(d.complaints) ? d.complaints : []);
       })
       .catch((err) => console.error("Error loading requests for stats:", err))
       .finally(() => setLoadingRequests(false));

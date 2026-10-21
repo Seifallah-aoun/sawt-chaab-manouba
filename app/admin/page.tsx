@@ -397,10 +397,10 @@ export default function AdminDashboard() {
   // Fetch requests, appointments & alerts
   const fetchDashboardData = () => {
     setLoadingRequests(true);
-    fetch("/api/requests")
+    fetch(`/api/requests?t=${Date.now()}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
-        if (d.complaints) setRequests(d.complaints);
+        setRequests(Array.isArray(d.complaints) ? d.complaints : []);
       })
       .catch((err) => console.error("Error fetching requests:", err))
       .finally(() => setLoadingRequests(false));
@@ -990,17 +990,20 @@ export default function AdminDashboard() {
     }
   };
 
-  // Delete Citizen Request permanently
+  const [isDeletingAllRequests, setIsDeletingAllRequests] = useState(false);
+
+  // Delete Citizen Request permanently from Supabase
   const handleDeleteRequest = async (id: string, citizenName: string) => {
     const confirmed = window.confirm(
-      `هل أنت متأكد من الحذف النهائي للمطلب (${id}) الخاص بالمواطن(ة) "${citizenName}"؟\n\nتنبيه: سيتم مسح المطلب كلياً من قاعدة البيانات، ولن يتمكن المواطن من تتبعه.`
+      `هل أنت متأكد من الحذف النهائي للمطلب (${id}) الخاص بالمواطن(ة) "${citizenName}"؟\n\nتنبيه: سيتم مسح المطلب كلياً من قاعدة البيانات السحابية Supabase، ولن يتمكن المواطن من تتبعه.`
     );
     if (!confirmed) return;
 
     setDeletingRequestId(id);
     try {
-      const res = await fetch(`/api/requests?id=${encodeURIComponent(id)}`, {
+      const res = await fetch(`/api/requests?id=${encodeURIComponent(id)}&t=${Date.now()}`, {
         method: "DELETE",
+        headers: { "Cache-Control": "no-store" },
       });
       const data = await res.json();
       if (res.ok) {
@@ -1017,6 +1020,36 @@ export default function AdminDashboard() {
       alert("حدث خطأ أثناء محاولة حذف المطلب.");
     } finally {
       setDeletingRequestId(null);
+    }
+  };
+
+  // Delete ALL Citizen Requests permanently from Supabase
+  const handleDeleteAllRequests = async () => {
+    if (requests.length === 0) return;
+    const confirmed = window.confirm(
+      `تحذير هام: هل أنت متأكد من مسح وحذف جميع المطالب والشكاوى (${requests.length}) نهائياً من قاعدة البيانات السحابية Supabase؟\n\nلن يمكن التراجع عن هذا الإجراء وسيتم تصفير القائمة بالكامل ولن تعود المطالب القديمة مجدداً.`
+    );
+    if (!confirmed) return;
+
+    setIsDeletingAllRequests(true);
+    try {
+      const res = await fetch(`/api/requests?all=true&t=${Date.now()}`, {
+        method: "DELETE",
+        headers: { "Cache-Control": "no-store" },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setRequests([]);
+        setSelectedRequest(null);
+        notifyDataChanged("REQUEST_DELETED");
+      } else {
+        alert(data.error || "تعذر مسح جميع المطالب.");
+      }
+    } catch (err) {
+      console.error("Error deleting all requests:", err);
+      alert("حدث خطأ أثناء محاولة مسح المطالب.");
+    } finally {
+      setIsDeletingAllRequests(false);
     }
   };
 
@@ -2411,6 +2444,21 @@ export default function AdminDashboard() {
                   <option value="تمت مراسلة الوزارة/البلدية">تمت مراسلة الوزارة/البلدية</option>
                   <option value="تم الحل">تم الحل</option>
                 </select>
+
+                {/* Delete All Requests Button */}
+                {requests.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleDeleteAllRequests}
+                    disabled={isDeletingAllRequests}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300 transition cursor-pointer shrink-0"
+                    title="مسح وحذف جميع المطالب نهائياً"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">مسح الكل ({requests.length})</span>
+                    <span className="sm:hidden">مسح الكل</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -2422,7 +2470,9 @@ export default function AdminDashboard() {
               </div>
             ) : filteredRequests.length === 0 ? (
               <div className="rounded-2xl border border-zinc-200 bg-white p-12 text-center text-xs text-zinc-500 dark:bg-zinc-900 dark:border-zinc-800">
-                لا توجد مطالب مطابقة لمعايير البحث الحالية.
+                {requests.length === 0
+                  ? "لا توجد أي مطالب أو شكاوى مسجلة حالياً (قاعدة البيانات فارغة 0 مطلب)."
+                  : "لا توجد مطالب مطابقة لمعايير البحث الحالية."}
               </div>
             ) : (
               <div className="space-y-4">
