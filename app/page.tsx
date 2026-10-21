@@ -76,25 +76,19 @@ export default function Home() {
       {/* Top Header / Navigation Bar */}
       <header className="sticky top-0 z-40 border-b border-zinc-200/80 bg-white/90 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-950/90">
         <div className="container mx-auto flex h-16 max-w-6xl items-center justify-between px-3 sm:px-6">
-          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          {/* Top Header Branding Container: Fully Rounded (Pill-shaped) with Clean Border */}
+          <div className="flex items-center gap-2.5 sm:gap-3 py-1 px-1.5 sm:px-3 rounded-full border border-zinc-200/80 bg-zinc-50/80 dark:border-zinc-800 dark:bg-zinc-900/60 shadow-xs min-w-0">
             {/* Official Tunisian Flag Circular Emblem */}
-            <div className="relative flex h-10 w-10 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-full overflow-hidden shadow-md shadow-red-500/25 border-2 border-red-600/30 dark:border-red-500/50 bg-red-600 ring-2 ring-white/90 dark:ring-zinc-900">
+            <div className="relative flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-full overflow-hidden shadow-sm shadow-red-500/20 border border-red-500/30 dark:border-red-500/50 bg-red-600 ring-2 ring-white dark:ring-zinc-900">
               <img
                 src="/tunisia-flag.jpg"
                 alt="علم الجمهورية التونسية"
                 className="h-full w-full object-cover scale-110"
               />
             </div>
-            <div className="flex flex-col leading-tight min-w-0">
-              <span className="text-sm sm:text-lg font-black text-zinc-900 dark:text-zinc-50 tracking-tight truncate flex items-center gap-2">
-                <span>النائب أسماء درويش</span>
-                <span className="inline-flex items-center overflow-hidden rounded-full border border-red-300 dark:border-red-800 shadow-xs h-4 w-4 sm:h-4.5 sm:w-4.5 shrink-0 bg-red-600">
-                  <img
-                    src="/tunisia-flag.jpg"
-                    alt="تونس"
-                    className="h-full w-full object-cover scale-125"
-                  />
-                </span>
+            <div className="flex flex-col leading-tight min-w-0 pr-0.5 pl-2 sm:pl-3">
+              <span className="text-sm sm:text-base font-black text-zinc-900 dark:text-zinc-50 tracking-tight truncate">
+                النائب أسماء درويش
               </span>
               <span className="text-[10px] sm:text-xs font-semibold text-zinc-500 dark:text-zinc-400 truncate">
                 مجلس نواب الشعب | منوبة - الدندان
@@ -205,11 +199,11 @@ export default function Home() {
       <footer className="border-t border-zinc-200 bg-white py-8 dark:border-zinc-800 dark:bg-zinc-950">
         <div className="container mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 text-center sm:flex-row sm:text-right">
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-11 shrink-0 items-center justify-center rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-800 shadow-xs">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full overflow-hidden border border-red-500/30 dark:border-red-500/40 shadow-xs bg-red-600 ring-2 ring-white dark:ring-zinc-900">
               <img
                 src="/tunisia-flag.jpg"
                 alt="الجمهورية التونسية"
-                className="h-full w-full object-cover"
+                className="h-full w-full object-cover scale-110"
               />
             </div>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
