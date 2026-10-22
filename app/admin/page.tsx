@@ -53,8 +53,7 @@ import {
   Rocket,
   Briefcase,
   Mail,
-  EyeOff,
-  KeyRound
+  EyeOff
 } from "lucide-react";
 import { acquireLiveMediaStream, LiveStreamBroadcaster } from "@/lib/native-stream";
 import { setGlobalMediaStream, getGlobalMediaStream } from "@/lib/stream-sync";
@@ -2144,7 +2143,7 @@ export default function AdminDashboard() {
                   autoComplete="username"
                   value={loginEmail}
                   onChange={(e) => setLoginEmail(e.target.value)}
-                  placeholder="Asmaderouiche@Manouba.tn"
+                  placeholder="name@email.com"
                   className="w-full rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 pl-10 text-xs sm:text-sm font-medium text-zinc-900 focus:border-red-500 focus:bg-white focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dir-ltr text-left"
                 />
                 <Mail className="absolute left-3.5 top-3.5 h-4 w-4 text-zinc-400" />
@@ -2185,35 +2184,6 @@ export default function AdminDashboard() {
                 <span>{loginError}</span>
               </div>
             )}
-
-            {/* Autofill / Credentials Hint Card */}
-            <div className="rounded-2xl border border-zinc-200 bg-zinc-50/80 p-3.5 dark:border-zinc-800 dark:bg-zinc-800/40 text-right space-y-2">
-              <div className="flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400">
-                <span className="font-bold flex items-center gap-1">
-                  <KeyRound className="h-3.5 w-3.5 text-red-600" />
-                  <span>بيانات الدخول المعتمدة للنائب:</span>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLoginEmail("Asmaderouiche@Manouba.tn");
-                    setLoginPassword("Manouba-123");
-                    setLoginError(null);
-                  }}
-                  className="text-red-600 font-bold hover:underline cursor-pointer"
-                >
-                  تعبئة تلقائية
-                </button>
-              </div>
-              <div className="flex flex-col gap-1 text-[11px] font-mono text-zinc-700 dark:text-zinc-300 dir-ltr text-left">
-                <span className="bg-white dark:bg-zinc-900 px-2 py-0.5 rounded border border-zinc-200 dark:border-zinc-700 truncate">
-                  Login: <strong>Asmaderouiche@Manouba.tn</strong>
-                </span>
-                <span className="bg-white dark:bg-zinc-900 px-2 py-0.5 rounded border border-zinc-200 dark:border-zinc-700">
-                  Password: <strong>Manouba-123</strong>
-                </span>
-              </div>
-            </div>
 
             {/* Submit Button */}
             <button
