@@ -77,54 +77,61 @@ export default function Home() {
       <header className="sticky top-0 z-40 border-b border-zinc-200/80 bg-white/90 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-950/90">
         <div className="container mx-auto flex h-16 max-w-6xl items-center justify-between px-3 sm:px-6">
           {/* Top Header Branding Container: Fully Rounded (Pill-shaped) with Clean Border */}
-          <div className="flex items-center gap-2.5 sm:gap-3 py-1 px-1.5 sm:px-3 rounded-full border border-zinc-200/80 bg-zinc-50/80 dark:border-zinc-800 dark:bg-zinc-900/60 shadow-xs min-w-0">
+          <div className="flex items-center gap-2 sm:gap-3 py-1 px-1.5 sm:px-3 rounded-full border border-zinc-200/80 bg-zinc-50/80 dark:border-zinc-800 dark:bg-zinc-900/60 shadow-xs min-w-0">
             {/* Official Tunisian Flag Circular Emblem */}
-            <div className="relative flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-full overflow-hidden shadow-sm shadow-red-500/20 border border-red-500/30 dark:border-red-500/50 bg-red-600 ring-2 ring-white dark:ring-zinc-900">
+            <div className="relative flex h-8 w-8 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-full overflow-hidden shadow-sm shadow-red-500/20 border border-red-500/30 dark:border-red-500/50 bg-red-600 ring-2 ring-white dark:ring-zinc-900">
               <img
                 src="/tunisia-flag.jpg"
                 alt="علم الجمهورية التونسية"
                 className="h-full w-full object-cover scale-110"
               />
             </div>
-            <div className="flex flex-col leading-tight min-w-0 pr-0.5 pl-2 sm:pl-3">
-              <span className="text-sm sm:text-base font-black text-zinc-900 dark:text-zinc-50 tracking-tight truncate">
+            <div className="flex flex-col leading-tight min-w-0 pr-0.5 pl-1.5 sm:pl-3">
+              <span className="text-xs sm:text-base font-black text-zinc-900 dark:text-zinc-50 tracking-tight whitespace-nowrap">
                 النائب أسماء درويش
               </span>
-              <span className="text-[10px] sm:text-xs font-semibold text-zinc-500 dark:text-zinc-400 truncate">
+              <span className="text-[9px] sm:text-xs font-semibold text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
                 مجلس نواب الشعب | منوبة - الدندان
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+          {/* Action Buttons: Clean Icon-only on mobile, full text on desktop */}
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
             <button
               type="button"
               onClick={scrollToTracking}
-              className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-white px-3.5 py-1.5 text-xs font-bold text-red-700 hover:bg-red-50 dark:border-red-900/60 dark:bg-zinc-900 dark:text-red-300 dark:hover:bg-red-950/40 transition cursor-pointer"
+              className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-white px-3.5 py-1.5 text-xs font-bold text-red-700 hover:bg-red-50 dark:border-red-900/60 dark:bg-zinc-900 dark:text-red-300 dark:hover:bg-red-950/40 transition cursor-pointer shadow-xs"
             >
               <Search className="h-3.5 w-3.5 text-red-500" />
               <span>تتبع مطلب</span>
             </button>
 
+            {/* Voice Complaint Button: Icon-only on mobile */}
             <button
               type="button"
               onClick={openVoiceModal}
-              className="inline-flex items-center gap-1 sm:gap-1.5 rounded-full border border-red-300 bg-red-50/60 px-2.5 sm:px-3.5 py-1.5 text-[11px] sm:text-xs font-bold text-red-700 hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/50 dark:text-red-300 transition cursor-pointer"
+              title="تسجيل شكوى صوتية"
+              aria-label="تسجيل شكوى صوتية"
+              className="inline-flex h-9 w-9 sm:h-auto sm:w-auto items-center justify-center gap-1.5 rounded-full border border-red-300 bg-red-50/70 p-0 sm:px-3.5 sm:py-1.5 text-xs font-bold text-red-700 hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/50 dark:text-red-300 transition cursor-pointer shadow-xs"
             >
-              <Mic className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-red-600 shrink-0" />
-              <span className="whitespace-nowrap">شكوى صوتية</span>
+              <Mic className="h-4 w-4 text-red-600 shrink-0" />
+              <span className="hidden sm:inline whitespace-nowrap">شكوى صوتية</span>
             </button>
 
+            {/* Petition Button: Icon-only on mobile */}
             <button
               type="button"
               onClick={openPetitionModal}
-              className="inline-flex items-center gap-1 sm:gap-1.5 rounded-full border border-red-300 bg-white px-2.5 sm:px-3.5 py-1.5 text-[11px] sm:text-xs font-bold text-red-700 hover:bg-red-50 dark:border-red-900/60 dark:bg-zinc-900 dark:text-red-300 dark:hover:bg-red-950/40 transition cursor-pointer"
+              title="تقديم مطلب أو عريضة"
+              aria-label="تقديم مطلب أو عريضة"
+              className="inline-flex h-9 w-9 sm:h-auto sm:w-auto items-center justify-center gap-1.5 rounded-full border border-red-300 bg-white p-0 sm:px-3.5 sm:py-1.5 text-xs font-bold text-red-700 hover:bg-red-50 dark:border-red-900/60 dark:bg-zinc-900 dark:text-red-300 dark:hover:bg-red-950/40 transition cursor-pointer shadow-xs"
             >
-              <Send className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-red-600 shrink-0" />
-              <span className="whitespace-nowrap">تقديم عريضة</span>
+              <Send className="h-4 w-4 text-red-600 shrink-0" />
+              <span className="hidden sm:inline whitespace-nowrap">تقديم عريضة</span>
             </button>
 
-            {/* Dark / Light Mode Toggle */}
+            {/* Dark / Light Mode Toggle: Icon-only */}
             <ThemeToggle />
           </div>
         </div>

@@ -32,3 +32,27 @@ nextjs-portal,
 [data-nextjs-dialog-overlay] {
   display: none !important;
 }
+
+/* Auto-scroll marquee for news ticker */
+@keyframes tickerGlideRtl {
+  0%, 18% {
+    transform: translateX(0);
+  }
+  82%, 100% {
+    transform: translateX(var(--ticker-diff, 0px));
+  }
+}
+
+.animate-ticker-rtl {
+  animation: tickerGlideRtl var(--ticker-duration, 7s) ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+/* Hide scrollbar utility */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
