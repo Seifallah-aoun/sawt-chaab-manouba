@@ -57,6 +57,7 @@ export default function ComplaintModal({
   mode,
   onTrackComplaint,
 }: ComplaintModalProps) {
+  const [currentMode, setCurrentMode] = useState<ModalMode>(mode);
   const [citizenName, setCitizenName] = useState("");
   const [phone, setPhone] = useState("");
   const [zone, setZone] = useState<string>(MANOUBA_DEN_DEN_ZONES[0]);
@@ -81,6 +82,7 @@ export default function ComplaintModal({
 
   useEffect(() => {
     if (isOpen) {
+      setCurrentMode(mode);
       setError(null);
       setCreatedComplaint(null);
       setCopied(false);
@@ -107,30 +109,55 @@ export default function ComplaintModal({
   };
 
   const handleGetGps = () => {
-    if (!navigator.geolocation) {
-      setGpsMessage("خاصية تحديد الموقع غير مدعومة في متصفحك.");
+    if (typeof window === "undefined" || !navigator.geolocation) {
+      setGpsMessage("تم اعتماد اختيار المنطقة يدوياً من قائمة العمادات أدناه.");
       return;
     }
 
     setGpsLoading(true);
     setGpsMessage(null);
 
+    const highAccuracyOptions: PositionOptions = {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 60000,
+    };
+
+    const lowAccuracyOptions: PositionOptions = {
+      enableHighAccuracy: false,
+      timeout: 10000,
+      maximumAge: 60000,
+    };
+
+    const handleSuccess = (position: GeolocationPosition) => {
+      setGpsLocation({
+        latitude: Number(position.coords.latitude.toFixed(5)),
+        longitude: Number(position.coords.longitude.toFixed(5)),
+        accuracy: Math.round(position.coords.accuracy),
+      });
+      setGpsLoading(false);
+      setGpsMessage("تم التقاط الإحداثيات بنجاح بنظام GPS");
+    };
+
+    const handleFallbackError = (err: GeolocationPositionError) => {
+      console.warn("Mobile geolocation fallback error:", err.message);
+      setGpsLoading(false);
+      // Smooth and silent fallback to manual zone dropdown without harsh error messages
+      setGpsMessage("تم اعتماد اختيار المنطقة يدوياً من قائمة العمادات أدناه.");
+    };
+
     navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setGpsLocation({
-          latitude: Number(position.coords.latitude.toFixed(5)),
-          longitude: Number(position.coords.longitude.toFixed(5)),
-          accuracy: Math.round(position.coords.accuracy),
-        });
-        setGpsLoading(false);
-        setGpsMessage("تم التقاط الإحداثيات الجغرافية بنجاح بنظام GPS");
-      },
+      handleSuccess,
       (err) => {
-        console.error("GPS error:", err);
-        setGpsLoading(false);
-        setGpsMessage("تعذر التقاط الموقع. تأكد من تفعيل خدمة الموقع الجغرافي.");
+        console.warn("GPS high accuracy timed out or failed, attempting standard accuracy fallback:", err.message);
+        // Seamless fallback to standard accuracy
+        navigator.geolocation.getCurrentPosition(
+          handleSuccess,
+          handleFallbackError,
+          lowAccuracyOptions
+        );
       },
-      { timeout: 10000, enableHighAccuracy: true }
+      highAccuracyOptions
     );
   };
 
@@ -152,9 +179,9 @@ export default function ComplaintModal({
     }
 
     // Mode-specific validation
-    if (mode === "voice") {
+    if (currentMode === "voice") {
       if (!audioBase64) {
-        setError("الرجاء تسجيل الرسالة أو الشكوى الصوتية عبر الميكروفون أولاً قبل الإرسال.");
+        setError("الرجاء تسجيل الرسالة أو الشكوى الصوتية عبر الميكروفون أولاً قبل الإرسال، أو التبديل لخيار المطلب الكتابي.");
         return;
       }
     } else {
@@ -167,7 +194,7 @@ export default function ComplaintModal({
     setIsLoading(true);
 
     try {
-      const finalDescription = mode === "voice" 
+      const finalDescription = currentMode === "voice" 
         ? (voiceNoteOptional.trim() || "شكوى صوتية مسجلة من مواطن بدائرة منوبة - الدندان") 
         : description.trim();
 
@@ -182,9 +209,9 @@ export default function ComplaintModal({
           zone,
           category,
           priority,
-          type: mode,
+          type: currentMode,
           description: finalDescription,
-          audioBase64: mode === "voice" ? audioBase64 : undefined,
+          audioBase64: currentMode === "voice" ? audioBase64 : undefined,
           imageBase64: imageBase64 || undefined,
           gpsLocation,
         }),
@@ -221,15 +248,15 @@ export default function ComplaintModal({
     onClose();
   };
 
-  const isVoiceMode = mode === "voice";
+  const isVoiceMode = currentMode === "voice";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto bg-black/60 backdrop-blur-sm">
       <div className="relative w-full max-w-2xl rounded-3xl bg-white shadow-2xl transition-all dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 my-8 overflow-hidden">
         {/* Modal Top Header */}
-        <div className="flex items-center justify-between border-b border-zinc-100 bg-zinc-50/80 px-6 py-4 dark:border-zinc-800 dark:bg-zinc-950/60">
+        <div className="flex items-center justify-between border-b border-zinc-100 bg-zinc-50/80 px-4 sm:px-6 py-4 dark:border-zinc-800 dark:bg-zinc-950/60">
           <div className="flex items-center gap-3">
-            <div className={`flex h-10 w-10 items-center justify-center rounded-2xl text-white shadow-md ${
+            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-white shadow-md ${
               isVoiceMode ? "bg-red-600 shadow-red-500/30" : "bg-blue-600 shadow-blue-500/30"
             }`}>
               {isVoiceMode ? <Mic className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
@@ -243,13 +270,36 @@ export default function ComplaintModal({
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full p-2 text-zinc-400 hover:bg-zinc-200/60 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 transition cursor-pointer"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Quick Mode Switch Button */}
+            <button
+              type="button"
+              onClick={() => setCurrentMode(isVoiceMode ? "petition" : "voice")}
+              className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition cursor-pointer"
+            >
+              {isVoiceMode ? (
+                <>
+                  <FileText className="h-3.5 w-3.5 text-blue-600" />
+                  <span className="hidden sm:inline">التحويل لكتابة مطلب</span>
+                  <span className="sm:hidden">كتابة مطلب</span>
+                </>
+              ) : (
+                <>
+                  <Mic className="h-3.5 w-3.5 text-red-600" />
+                  <span className="hidden sm:inline">التحويل لتسجيل صوتي</span>
+                  <span className="sm:hidden">تسجيل صوتي</span>
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-full p-2 text-zinc-400 hover:bg-zinc-200/60 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 transition cursor-pointer"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         {/* Modal Body */}
@@ -348,6 +398,7 @@ export default function ComplaintModal({
                 <div className="space-y-4">
                   <VoiceRecorder
                     onAudioRecorded={(audio) => setAudioBase64(audio)}
+                    onFallbackToWritten={() => setCurrentMode("petition")}
                   />
                   <div>
                     <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
@@ -576,9 +627,10 @@ export default function ComplaintModal({
                       </button>
                     )}
                     {gpsMessage && !gpsLocation && (
-                      <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-400">
-                        {gpsMessage}
-                      </p>
+                      <div className="mt-2 flex items-center gap-1.5 rounded-xl bg-zinc-100/90 dark:bg-zinc-800/80 px-2.5 py-1.5 text-[11px] text-zinc-600 dark:text-zinc-300 border border-zinc-200/60 dark:border-zinc-700/60">
+                        <MapPin className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
+                        <span>{gpsMessage}</span>
+                      </div>
                     )}
                   </div>
                 </div>
