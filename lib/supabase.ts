@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { Complaint, ComplaintStatus, ComplaintPriority, ComplaintCategory } from "./types";
+import { getStoreItem, setStoreItem } from "./platform-store";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://botcqqbgojlrcrkwopqg.supabase.co";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "sb_publishable_NyZwwnReTnaUASaXL5uUcg_y4HFxDI1";
@@ -12,6 +13,7 @@ export interface SupabaseRequestRecord {
   created_at?: string;
   citizen_name: string;
   phone: string;
+  email?: string | null;
   zone: string;
   category: string;
   description: string;
@@ -20,17 +22,27 @@ export interface SupabaseRequestRecord {
   priority?: string;
   status?: string;
   admin_public_note?: string | null;
+  admin_reply?: string | null;
+  reply_pdf_url?: string | null;
   official_letter_draft?: string | null;
+}
+
+export interface RequestMetadata {
+  email?: string;
+  adminResponsePdf?: string;
+  adminResponsePdfName?: string;
+  adminResponseDate?: string;
 }
 
 /**
  * Bidirectional mapper: Supabase snake_case row -> Clean Frontend camelCase Complaint
  */
-export function fromSupabaseRow(row: any): Complaint {
+export function fromSupabaseRow(row: any, meta?: RequestMetadata): Complaint {
   if (!row) return {} as Complaint;
   const isVoice = Boolean(row.audio_base64);
   const ticketId = row.ticket_id || row.id || `TN-${Math.floor(1000 + Math.random() * 9000)}`;
-  const adminNote = row.admin_public_note ?? undefined;
+  const adminReply = row.admin_reply ?? row.admin_public_note ?? undefined;
+  const replyPdf = row.reply_pdf_url ?? meta?.adminResponsePdf ?? row.admin_response_pdf ?? undefined;
   const letterDraft = row.official_letter_draft ?? undefined;
 
   return {
@@ -38,6 +50,7 @@ export function fromSupabaseRow(row: any): Complaint {
     createdAt: row.created_at || new Date().toISOString(),
     citizenName: row.citizen_name || "",
     phone: row.phone || "",
+    email: row.email || meta?.email || undefined,
     zone: row.zone || "منوبة المدينة",
     category: (row.category as ComplaintCategory) || "أخرى",
     description: row.description || (isVoice ? "شكوى صوتية مسجلة من المواطن" : ""),
@@ -46,8 +59,11 @@ export function fromSupabaseRow(row: any): Complaint {
     attachmentName: row.attachment_name || undefined,
     priority: (row.priority as ComplaintPriority) || "عادي",
     status: (row.status as ComplaintStatus) || "جديد",
-    adminPublicNote: adminNote,
-    publicNote: adminNote, // backwards compatibility
+    adminPublicNote: adminReply,
+    publicNote: adminReply, // backwards compatibility
+    adminResponsePdf: replyPdf,
+    adminResponsePdfName: meta?.adminResponsePdfName || (replyPdf ? `وثيقة_رد_رسمي_${ticketId}.pdf` : undefined),
+    adminResponseDate: meta?.adminResponseDate || row.updated_at || undefined,
     officialLetterDraft: letterDraft,
     officialLetterText: letterDraft, // backwards compatibility
   };
@@ -62,11 +78,14 @@ export function toSupabaseRow(
   const ticketId = c.id && c.id.startsWith("TN-") ? c.id : (c.id || `TN-${Math.floor(1000 + Math.random() * 9000)}`);
   const adminNote = c.adminPublicNote !== undefined ? c.adminPublicNote : (c.publicNote !== undefined ? c.publicNote : null);
   const letterDraft = c.officialLetterDraft !== undefined ? c.officialLetterDraft : (c.officialLetterText !== undefined ? c.officialLetterText : null);
+  const cleanEmail = (c.email || "").trim() || null;
+  const pdfUrl = c.adminResponsePdf || null;
 
   return {
     ticket_id: ticketId,
     citizen_name: (c.citizenName || "").trim(),
     phone: (c.phone || "").replace(/\D/g, ""),
+    email: cleanEmail,
     zone: (c.zone || "منوبة المدينة").trim(),
     category: c.category || "أخرى",
     description: (c.description || (c.type === "voice" || c.audioBase64 ? "شكوى صوتية مسجلة من المواطن" : "")).trim(),
@@ -75,6 +94,8 @@ export function toSupabaseRow(
     priority: c.priority || "عادي",
     status: c.status || "جديد",
     admin_public_note: adminNote,
+    admin_reply: adminNote,
+    reply_pdf_url: pdfUrl,
     official_letter_draft: letterDraft,
     created_at: c.createdAt || new Date().toISOString(),
   };
@@ -89,10 +110,10 @@ export const mapComplaintToRow = toSupabaseRow;
  */
 export async function getSupabaseComplaints(): Promise<Complaint[]> {
   try {
-    const { data, error } = await supabase
-      .from("requests")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const [{ data, error }, metaMap] = await Promise.all([
+      supabase.from("requests").select("*").order("created_at", { ascending: false }),
+      getStoreItem<Record<string, RequestMetadata>>("requests_metadata", {}),
+    ]);
 
     if (error) {
       console.error("[supabase] getComplaints error:", error);
@@ -100,7 +121,10 @@ export async function getSupabaseComplaints(): Promise<Complaint[]> {
     }
 
     if (!data) return [];
-    return data.map(fromSupabaseRow);
+    return data.map((row) => {
+      const ticketId = row.ticket_id || row.id;
+      return fromSupabaseRow(row, metaMap[ticketId]);
+    });
   } catch (err) {
     console.error("[supabase] getComplaints exception:", err);
     return [];
@@ -108,24 +132,33 @@ export async function getSupabaseComplaints(): Promise<Complaint[]> {
 }
 
 /**
- * Fetch complaint by ID or ticket_id from Supabase
+ * Fetch single complaint by TN-XXXX or UUID
  */
 export async function getSupabaseComplaintById(id: string): Promise<Complaint | null> {
   try {
     const cleanId = id.trim();
-    // 1. Try matching ticket_id first
-    let query = supabase.from("requests").select("*").eq("ticket_id", cleanId).maybeSingle();
-    let { data, error } = await query;
+    const [{ data, error }, metaMap] = await Promise.all([
+      supabase.from("requests").select("*").eq("ticket_id", cleanId).maybeSingle(),
+      getStoreItem<Record<string, RequestMetadata>>("requests_metadata", {}),
+    ]);
 
-    // 2. If not found and looks like a UUID, fallback to id column
-    if (!data && !error && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId)) {
-      const fallback = await supabase.from("requests").select("*").eq("id", cleanId).maybeSingle();
-      data = fallback.data;
-      error = fallback.error;
+    if (!error && data) {
+      return fromSupabaseRow(data, metaMap[cleanId]);
     }
 
-    if (error || !data) return null;
-    return fromSupabaseRow(data);
+    // Try id column if UUID
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId)) {
+      const fallback = await supabase
+        .from("requests")
+        .select("*")
+        .eq("id", cleanId)
+        .maybeSingle();
+      if (!fallback.error && fallback.data) {
+        return fromSupabaseRow(fallback.data, metaMap[cleanId] || metaMap[fallback.data.ticket_id]);
+      }
+    }
+
+    return null;
   } catch (err) {
     console.error("[supabase] getById exception:", err);
     return null;
@@ -133,21 +166,23 @@ export async function getSupabaseComplaintById(id: string): Promise<Complaint | 
 }
 
 /**
- * Fetch complaints by citizen phone number from Supabase
+ * Fetch complaints by citizen phone number
  */
 export async function getSupabaseComplaintsByPhone(phone: string): Promise<Complaint[]> {
   try {
     const cleanPhone = phone.replace(/\D/g, "");
     if (!cleanPhone) return [];
 
-    const { data, error } = await supabase
-      .from("requests")
-      .select("*")
-      .eq("phone", cleanPhone)
-      .order("created_at", { ascending: false });
+    const [{ data, error }, metaMap] = await Promise.all([
+      supabase.from("requests").select("*").eq("phone", cleanPhone).order("created_at", { ascending: false }),
+      getStoreItem<Record<string, RequestMetadata>>("requests_metadata", {}),
+    ]);
 
     if (error || !data) return [];
-    return data.map(fromSupabaseRow);
+    return data.map((row) => {
+      const ticketId = row.ticket_id || row.id;
+      return fromSupabaseRow(row, metaMap[ticketId]);
+    });
   } catch (err) {
     console.error("[supabase] getByPhone exception:", err);
     return [];
@@ -171,7 +206,30 @@ export async function insertSupabaseComplaint(complaint: Complaint): Promise<Com
       return null;
     }
 
-    return data ? fromSupabaseRow(data) : complaint;
+    // Persist extra metadata (email, pdf, etc.) to platform_store
+    if (complaint.email || complaint.adminResponsePdf) {
+      try {
+        const metaMap = await getStoreItem<Record<string, RequestMetadata>>("requests_metadata", {});
+        metaMap[complaint.id] = {
+          email: complaint.email,
+          adminResponsePdf: complaint.adminResponsePdf,
+          adminResponsePdfName: complaint.adminResponsePdfName,
+          adminResponseDate: complaint.adminResponseDate,
+        };
+        await setStoreItem("requests_metadata", metaMap);
+      } catch (mErr) {
+        console.warn("[supabase] Could not save request metadata:", mErr);
+      }
+    }
+
+    const savedMeta: RequestMetadata = {
+      email: complaint.email,
+      adminResponsePdf: complaint.adminResponsePdf,
+      adminResponsePdfName: complaint.adminResponsePdfName,
+      adminResponseDate: complaint.adminResponseDate,
+    };
+
+    return data ? fromSupabaseRow(data, savedMeta) : complaint;
   } catch (err) {
     console.error("[supabase] insert exception:", err);
     return null;
@@ -184,10 +242,16 @@ export async function insertSupabaseComplaint(complaint: Complaint): Promise<Com
 export async function updateSupabaseComplaint(
   id: string,
   updates: Partial<Complaint> & {
+    adminReply?: string;
     adminPublicNote?: string;
+    replyPdfUrl?: string;
+    adminResponsePdf?: string;
+    adminResponsePdfName?: string;
+    adminResponseDate?: string;
     officialLetterDraft?: string;
     publicNote?: string;
     officialLetterText?: string;
+    email?: string;
   }
 ): Promise<Complaint | null> {
   try {
@@ -196,8 +260,24 @@ export async function updateSupabaseComplaint(
 
     if (updates.status !== undefined) patch.status = updates.status;
     if (updates.priority !== undefined) patch.priority = updates.priority;
-    if (updates.adminPublicNote !== undefined) patch.admin_public_note = updates.adminPublicNote;
-    else if (updates.publicNote !== undefined) patch.admin_public_note = updates.publicNote;
+
+    const reply = updates.adminReply !== undefined
+      ? updates.adminReply
+      : (updates.adminPublicNote !== undefined ? updates.adminPublicNote : updates.publicNote);
+
+    if (reply !== undefined) {
+      patch.admin_reply = reply;
+      patch.admin_public_note = reply;
+    }
+
+    const pdf = updates.replyPdfUrl !== undefined ? updates.replyPdfUrl : updates.adminResponsePdf;
+    if (pdf !== undefined) {
+      patch.reply_pdf_url = pdf;
+    }
+
+    if (updates.email !== undefined) {
+      patch.email = (updates.email || "").trim() || null;
+    }
     
     if (updates.officialLetterDraft !== undefined) patch.official_letter_draft = updates.officialLetterDraft;
     else if (updates.officialLetterText !== undefined) patch.official_letter_draft = updates.officialLetterText;
@@ -233,7 +313,20 @@ export async function updateSupabaseComplaint(
       return null;
     }
 
-    return data ? fromSupabaseRow(data) : null;
+    // Persist metadata (email, adminResponsePdf, adminResponsePdfName, adminResponseDate)
+    const metaMap = await getStoreItem<Record<string, RequestMetadata>>("requests_metadata", {});
+    const existingMeta = metaMap[cleanId] || {};
+    const updatedMeta: RequestMetadata = {
+      ...existingMeta,
+      ...(updates.email !== undefined && { email: updates.email }),
+      ...(updates.adminResponsePdf !== undefined && { adminResponsePdf: updates.adminResponsePdf }),
+      ...(updates.adminResponsePdfName !== undefined && { adminResponsePdfName: updates.adminResponsePdfName }),
+      ...(updates.adminResponseDate !== undefined && { adminResponseDate: updates.adminResponseDate }),
+    };
+    metaMap[cleanId] = updatedMeta;
+    await setStoreItem("requests_metadata", metaMap);
+
+    return data ? fromSupabaseRow(data, updatedMeta) : null;
   } catch (err) {
     console.error("[supabase] update exception:", err);
     return null;

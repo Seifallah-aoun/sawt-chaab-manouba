@@ -41,6 +41,7 @@ export interface Complaint {
   createdAt: string; // ISO date string
   citizenName: string;
   phone: string; // 8 digits
+  email?: string; // Optional citizen email for status & response notifications
   zone: string; // Imada / Delegation
   category: ComplaintCategory;
   description: string;
@@ -53,6 +54,9 @@ export interface Complaint {
   priority: ComplaintPriority;
   adminPublicNote?: string; // Direct note from MP to citizen
   publicNote?: string; // Note from MP to the citizen (alias)
+  adminResponsePdf?: string; // Base64 PDF data URL or file URL
+  adminResponsePdfName?: string; // Name of attached PDF response
+  adminResponseDate?: string; // ISO date of admin response
   officialLetterDraft?: string; // Official correspondence draft
   officialLetterText?: string; // Official correspondence text (alias)
   targetMinistry?: string; // Target ministry/institution
@@ -62,6 +66,7 @@ export interface Complaint {
 export interface ComplaintInput {
   citizenName: string;
   phone: string;
+  email?: string;
   zone: string;
   category: ComplaintCategory;
   description: string;

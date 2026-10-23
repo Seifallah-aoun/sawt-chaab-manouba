@@ -36,6 +36,34 @@ export default function Home() {
     window.addEventListener("open-petition-modal", handleOpenPetition);
     window.addEventListener("open-voice-modal", handleOpenVoice);
 
+    // Check URL parameters or hash for tracking ticket ID
+    try {
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const queryId = params.get("id") || params.get("ticket");
+        if (queryId) {
+          setTrackedId(queryId);
+          setTimeout(() => {
+            const el = document.getElementById("tracking-section");
+            el?.scrollIntoView({ behavior: "smooth" });
+          }, 400);
+        } else if (window.location.hash && window.location.hash.includes("id=")) {
+          const hashPart = window.location.hash.split("?")[1] || window.location.hash.split("#")[1];
+          if (hashPart) {
+            const hashParams = new URLSearchParams(hashPart);
+            const hashId = hashParams.get("id") || hashParams.get("ticket");
+            if (hashId) {
+              setTrackedId(hashId);
+              setTimeout(() => {
+                const el = document.getElementById("tracking-section");
+                el?.scrollIntoView({ behavior: "smooth" });
+              }, 400);
+            }
+          }
+        }
+      }
+    } catch {}
+
     return () => {
       window.removeEventListener("open-petition-modal", handleOpenPetition);
       window.removeEventListener("open-voice-modal", handleOpenVoice);

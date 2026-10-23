@@ -53,8 +53,11 @@ import {
   Rocket,
   Briefcase,
   Mail,
-  EyeOff
+  EyeOff,
+  Download,
+  Paperclip
 } from "lucide-react";
+import { generateOfficialResponsePdf } from "@/lib/generate-response-pdf";
 import { acquireLiveMediaStream, LiveStreamBroadcaster } from "@/lib/native-stream";
 import { setGlobalMediaStream, getGlobalMediaStream } from "@/lib/stream-sync";
 import { 
@@ -114,8 +117,8 @@ export default function AdminDashboard() {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [currentAdminUser, setCurrentAdminUser] = useState<string>("Asmaderouiche@Manouba.tn");
 
-  // Tabs: "requests" | "letter" | "projects" | "polls" | "appointments_alerts" | "live_qa" | "guides" | "youth"
-  const [activeTab, setActiveTab] = useState<"requests" | "letter" | "projects" | "polls" | "appointments_alerts" | "live_qa" | "guides" | "youth">("requests");
+  // Tabs: "requests" | "projects" | "polls" | "appointments_alerts" | "live_qa" | "guides" | "youth"
+  const [activeTab, setActiveTab] = useState<"requests" | "projects" | "polls" | "appointments_alerts" | "live_qa" | "guides" | "youth">("requests");
 
   // Live Town Hall & Q&A Chat State
   const [liveStreamConfig, setLiveStreamConfig] = useState<LiveStreamConfig | null>(null);
@@ -209,6 +212,9 @@ export default function AdminDashboard() {
   const [activeViewersCount, setActiveViewersCount] = useState<number>(0);
 
   useEffect(() => {
+    if (!isAuthenticated || !isStreamLive) {
+      return;
+    }
     let isMounted = true;
     const fetchActiveViewers = async () => {
       try {
@@ -225,13 +231,13 @@ export default function AdminDashboard() {
     };
 
     fetchActiveViewers();
-    const interval = setInterval(fetchActiveViewers, 3500);
+    const interval = setInterval(fetchActiveViewers, 5000);
 
     return () => {
       isMounted = false;
       clearInterval(interval);
     };
-  }, [isStreamLive]);
+  }, [isStreamLive, isAuthenticated]);
 
   // Chat filters
   const [chatZoneFilter, setChatZoneFilter] = useState("الكل");
@@ -266,14 +272,18 @@ export default function AdminDashboard() {
   const [noteText, setNoteText] = useState("");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-  // Formal Letter Generator State
-  const [letterRecipient, setLetterRecipient] = useState("السيد والي منوبة");
-  const [letterSubject, setLetterSubject] = useState("");
-  const [letterReference, setLetterReference] = useState("م.ب/منوبة/2026/418");
-  const [letterDate, setLetterDate] = useState("20 أكتوبر 2026");
-  const [letterBody, setLetterBody] = useState("");
-  const [letterPublishToRadar, setLetterPublishToRadar] = useState(true);
-  const [letterSaveMessage, setLetterSaveMessage] = useState<string | null>(null);
+  // Admin Response & PDF / Message Modal State
+  const [responseModalRequest, setResponseModalRequest] = useState<Complaint | null>(null);
+  const [responseStatus, setResponseStatus] = useState<ComplaintStatus>("تم الحل");
+  const [responseNote, setResponseNote] = useState<string>("");
+  const [responsePdfBase64, setResponsePdfBase64] = useState<string | null>(null);
+  const [responsePdfName, setResponsePdfName] = useState<string>("");
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [responseEmailInput, setResponseEmailInput] = useState<string>("");
+  const [responseSendEmail, setResponseSendEmail] = useState(true);
+  const [responsePublishRadar, setResponsePublishRadar] = useState(false);
+  const [isSubmittingResponse, setIsSubmittingResponse] = useState(false);
+  const [responseFeedback, setResponseFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   // Appointments & Alerts state
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -931,61 +941,161 @@ export default function AdminDashboard() {
     }
   };
 
-  const openLetterGeneratorForRequest = (req: Complaint) => {
+  // Admin Response & PDF/Message Handlers
+  const openResponseModal = (req: Complaint) => {
+    setResponseModalRequest(req);
     setSelectedRequest(req);
-    setLetterReference(`م.ب/منوبة/2026/${req.id.replace("TN-", "")}`);
-    setLetterSubject(`بخصوص ${req.category} بـ ${req.zone}: ${req.description.slice(0, 60)}...`);
-
-    // Smart default recipient based on sector
-    if (req.category.includes("الماء")) {
-      setLetterRecipient("السيد وزير الفلاحة والموارد المائية والشركة الوطنية لاستغلال وتوزيع المياه");
-    } else if (req.category.includes("الطرقات") || req.category.includes("الإنارة")) {
-      setLetterRecipient(req.zone.includes("الدندان") ? "السيد رئيس بلدية الدندان" : "السيد رئيس بلدية منوبة");
-    } else if (req.category.includes("الصحة")) {
-      setLetterRecipient("السيد وزير الصحة والمدير الجهوي للصحة بمنوبة");
-    } else if (req.category.includes("النقل")) {
-      setLetterRecipient("السيد وزير النقل والرئيس المدير العام لشركة نقل تونس");
-    } else {
-      setLetterRecipient("السيد والي منوبة");
-    }
-
-    setLetterBody(
-      `يشرفني أن أتوجه إلى جنابكم الموقر بهذه المراسلة البرلمانية لنقل مشاغل متساكني ${req.zone}، حيث تقدم المواطن (${req.citizenName}) بمطلب مسجل تحت عدد ${req.id} مفاده:\n\n"${req.description}"\n\nوحيث أن هذا الإشكال يمس من جودة الحياة اليومية لأهالي الجهة، نرجو من سيادتكم التفضل بإعطاء تعليماتكم لمصالحكم المختصة لإجراء المعاينات الميدانية اللازمة والتدخل العاجل لفض هذا الإشكال في أقرب الآجال، مع موافاتنا بما تقرر في الغرض حتى يتسنى إفادة المتساكنين.`
-    );
-
-    setActiveTab("letter");
+    setResponseStatus(req.status === "جديد" ? "بصدد الدرس" : req.status);
+    setResponseNote(req.adminPublicNote || req.publicNote || "");
+    setResponsePdfBase64(req.adminResponsePdf || null);
+    setResponsePdfName(req.adminResponsePdfName || "");
+    setResponseEmailInput(req.email || "");
+    setResponseSendEmail(Boolean(req.email));
+    setResponsePublishRadar(Boolean(req.publishedToProjects));
+    setResponseFeedback(null);
   };
 
-  const handleSaveAndPublishLetter = async () => {
-    if (!selectedRequest) return;
-    setUpdatingId(selectedRequest.id);
+  const closeResponseModal = () => {
+    setResponseModalRequest(null);
+    setResponseFeedback(null);
+    setIsGeneratingPdf(false);
+    setIsSubmittingResponse(false);
+  };
+
+  const handleGeneratePdfForResponse = async () => {
+    if (!responseModalRequest) return;
+    setIsGeneratingPdf(true);
+    setResponseFeedback(null);
+    try {
+      const { dataUrl, fileName } = await generateOfficialResponsePdf({
+        ticketId: responseModalRequest.id,
+        citizenName: responseModalRequest.citizenName,
+        zone: responseModalRequest.zone,
+        category: responseModalRequest.category,
+        status: responseStatus,
+        feedbackText: responseNote.trim() || "تمت متابعة ومعالجة هذا المطلب رسمياً من قبل المكتب البرلماني للنائب أسماء درويش مع المصالح والإدارات المختصة.",
+      });
+      setResponsePdfBase64(dataUrl);
+      setResponsePdfName(fileName);
+      setResponseFeedback({
+        type: "success",
+        message: "تم توليد وثيقة الرد الرسمية (PDF) بنجاح!",
+      });
+    } catch (err) {
+      console.error("Error generating response PDF:", err);
+      setResponseFeedback({
+        type: "error",
+        message: "حدث خطأ أثناء توليد وثيقة الرد الرسمية PDF.",
+      });
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
+  const handlePdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.type !== "application/pdf") {
+      alert("الرجاء اختيار ملف بصيغة PDF فقط.");
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      alert("حجم الملف يجب ألا يتجاوز 10 ميغابايت.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setResponsePdfBase64(reader.result as string);
+      setResponsePdfName(file.name);
+      setResponseFeedback({
+        type: "success",
+        message: `تم إرفاق ملف الرد PDF (${file.name}) بنجاح!`,
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSubmitResponse = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!responseModalRequest) return;
+
+    setIsSubmittingResponse(true);
+    setResponseFeedback(null);
 
     try {
+      const targetEmail = (responseEmailInput || responseModalRequest.email || "").trim();
       const res = await fetch("/api/requests", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          id: selectedRequest.id,
-          status: "تمت مراسلة الوزارة/البلدية",
-          targetMinistry: letterRecipient,
-          officialLetterText: `مراسلة برلمانية عدد ${letterReference} موجهة إلى ${letterRecipient} بخصوص ${letterSubject}`,
-          publicNote: `تم توجيه مراسلة رسمية عدد ${letterReference} إلى ${letterRecipient} بتاريخ ${letterDate} لمتابعة هذا الملف.`,
-          publishToProjects: letterPublishToRadar,
-          projectTitle: letterSubject,
-          projectSummary: selectedRequest.description,
+          id: responseModalRequest.id,
+          email: targetEmail || undefined,
+          status: responseStatus,
+          adminPublicNote: responseNote.trim(),
+          adminReply: responseNote.trim(),
+          adminResponsePdf: responsePdfBase64 || undefined,
+          adminResponsePdfName: responsePdfName || undefined,
+          replyPdfUrl: responsePdfBase64 || undefined,
+          sendEmailNotification: responseSendEmail,
+          publishToProjects: responsePublishRadar,
+          projectTitle: `متابعة إشكال ${responseModalRequest.category} بـ ${responseModalRequest.zone}`,
+          projectSummary: responseNote.trim() || responseModalRequest.description,
         }),
       });
 
-      if (res.ok) {
-        setLetterSaveMessage("تم توثيق المراسلة وحفظها، وتم نشرها في رادار المشاريع بالصفحة الرئيسية بنجاح!");
-        fetchDashboardData();
-        notifyDataChanged("PROJECT_PUBLISHED");
-        setTimeout(() => setLetterSaveMessage(null), 5000);
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "حدث خطأ أثناء حفظ الرد وتحديث المطلب.");
       }
-    } catch (err) {
-      console.error("Error publishing letter:", err);
+
+      if (data.complaint) {
+        setRequests((prev) =>
+          prev.map((r) => (r.id === responseModalRequest.id ? data.complaint : r))
+        );
+      }
+
+      notifyDataChanged("COMPLAINT_UPDATED");
+
+      let msg = "تم حفظ وتحديث المطلب في Supabase بنجاح!";
+      let feedbackType: "success" | "error" = "success";
+
+      if (data.emailError) {
+        msg = `تم حفظ الرد في Supabase بنجاح! ⚠️ لكن تعذر إرسال الإيميل: ${data.emailError}`;
+        feedbackType = "error";
+      } else if (data.emailDispatched && !data.emailSimulated) {
+        const sender = data.senderUsed ? ` (عبر ${data.senderUsed})` : "";
+        msg = `تم حفظ الرد في Supabase وإرسال إشعار بريدي رسمي عبر Resend إلى ${targetEmail} بنجاح! ✉️${sender}`;
+        if (data.emailWarning) {
+          msg += ` [${data.emailWarning}]`;
+        }
+      } else if (data.emailSimulated) {
+        msg = `تم حفظ الرد في Supabase بنجاح! (تمت محاكاة الإرسال البريدي إلى ${targetEmail})`;
+      } else if (targetEmail && responseSendEmail) {
+        msg = "تم حفظ وتحديث المطلب في Supabase بنجاح!";
+      }
+
+      setResponseFeedback({
+        type: feedbackType,
+        message: msg,
+      });
+
+      setTimeout(() => {
+        if (!data.emailError) {
+          closeResponseModal();
+        }
+      }, data.emailError ? 7000 : 2500);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "حدث خطأ أثناء إرسال الرد.";
+      setResponseFeedback({
+        type: "error",
+        message: msg,
+      });
     } finally {
-      setUpdatingId(null);
+      setIsSubmittingResponse(false);
     }
   };
 
@@ -2275,25 +2385,12 @@ export default function AdminDashboard() {
             onClick={() => setActiveTab("requests")}
             className={`py-3.5 border-b-2 transition cursor-pointer flex items-center gap-2 ${
               activeTab === "requests"
-                ? "border-red-600 text-red-600"
+                ? "border-red-600 text-red-600 font-bold"
                 : "border-transparent text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
             }`}
           >
             <FileText className="h-4 w-4" />
             <span>إدارة المطالب والشكاوى الصوتية ({requests.length})</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab("letter")}
-            className={`py-3.5 border-b-2 transition cursor-pointer flex items-center gap-2 ${
-              activeTab === "letter"
-                ? "border-red-600 text-red-600"
-                : "border-transparent text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
-            }`}
-          >
-            <Printer className="h-4 w-4" />
-            <span>المولّد الآلي للمراسلات الرسمية (A4)</span>
           </button>
 
           <button
@@ -2518,6 +2615,16 @@ export default function AdminDashboard() {
                         <p className="font-mono text-zinc-500 mt-0.5">
                           الهاتف: {req.phone}
                         </p>
+                        {req.email ? (
+                          <p className="text-emerald-700 dark:text-emerald-400 font-semibold mt-0.5 flex items-center gap-1">
+                            <Mail className="h-3 w-3 shrink-0" />
+                            <span>{req.email}</span>
+                          </p>
+                        ) : (
+                          <p className="text-zinc-400 text-[11px] mt-0.5">
+                            البريد: غير مسجل
+                          </p>
+                        )}
                         <p className="text-zinc-500 mt-0.5">
                           المنطقة: 📍 {req.zone}
                         </p>
@@ -2541,56 +2648,58 @@ export default function AdminDashboard() {
                       </div>
                     </div>
 
-                    {/* Public MP Note displayed to citizen */}
+                    {/* Public MP Response & Feedback displayed to citizen */}
                     <div className="pt-2 text-xs">
-                      {editingNoteId === req.id ? (
-                        <div className="space-y-2 bg-blue-50/60 p-3 rounded-xl border border-blue-200 dark:bg-blue-950/20 dark:border-blue-900/40">
-                          <label className="font-bold text-blue-900 dark:text-blue-300">
-                            تحديث الملاحظة الموجهة للمواطن (تظهر له مباشرة في شاشة التتبع):
-                          </label>
-                          <textarea
-                            rows={2}
-                            value={noteText}
-                            onChange={(e) => setNoteText(e.target.value)}
-                            className="w-full rounded-lg border border-blue-300 bg-white p-2 text-xs text-zinc-900 focus:outline-none dark:bg-zinc-800 dark:text-zinc-100"
-                          />
-                          <div className="flex items-center gap-2 justify-end">
-                            <button
-                              type="button"
-                              onClick={() => setEditingNoteId(null)}
-                              className="px-3 py-1 rounded-lg border text-zinc-600 hover:bg-zinc-100"
-                            >
-                              إلغاء
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleSavePublicNote(req.id)}
-                              className="px-3 py-1 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700"
-                            >
-                              حفظ ونشر للمواطن
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-between bg-zinc-50 p-2.5 rounded-xl dark:bg-zinc-800/40">
-                          <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-300">
-                            <span className="font-bold text-zinc-900 dark:text-zinc-100">
-                              إفادة مكتب النائب أسماء درويش للمواطن:
+                      <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-800 dark:bg-zinc-800/40 space-y-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300">
+                            <span className="font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
+                              <Building2 className="h-3.5 w-3.5 text-red-600" />
+                              إفادة وردّ مكتب النائب أسماء درويش للمواطن:
                             </span>
-                            <span className="line-clamp-1">{req.publicNote || "لا توجد ملاحظة حالياً."}</span>
+                            {req.adminResponseDate && (
+                              <span className="text-[10px] text-zinc-400">
+                                ({new Date(req.adminResponseDate).toLocaleDateString("ar-TN")})
+                              </span>
+                            )}
                           </div>
+
                           <button
                             type="button"
-                            onClick={() => {
-                              setEditingNoteId(req.id);
-                              setNoteText(req.publicNote || "");
-                            }}
-                            className="text-blue-600 hover:underline font-bold text-xs shrink-0"
+                            onClick={() => openResponseModal(req)}
+                            className="text-red-600 hover:text-red-700 dark:text-red-400 font-bold text-xs inline-flex items-center gap-1 shrink-0 cursor-pointer"
                           >
-                            تعديل الملاحظة
+                            <span>تحيين الرد أو المرفق</span>
+                            <Send className="h-3 w-3" />
                           </button>
                         </div>
-                      )}
+
+                        <p className="text-zinc-800 dark:text-zinc-200 leading-relaxed font-medium">
+                          {req.adminPublicNote || req.publicNote || "لا يوجد رد مسجل بعد (اضغط على الزر لإرسال رد وتوجيه رسمي للمواطن وإرفاق PDF)."}
+                        </p>
+
+                        {/* PDF Attachment badge if present */}
+                        {req.adminResponsePdf && (
+                          <div className="pt-2 border-t border-zinc-200 dark:border-zinc-700/60 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700 dark:bg-red-950 dark:text-red-300 uppercase">
+                                PDF
+                              </span>
+                              <span className="font-mono text-[11px] text-zinc-700 dark:text-zinc-300 truncate max-w-[200px] sm:max-w-xs">
+                                {req.adminResponsePdfName || `رد_رسمي_${req.id}.pdf`}
+                              </span>
+                            </div>
+                            <a
+                              href={req.adminResponsePdf}
+                              download={req.adminResponsePdfName || `رد_رسمي_${req.id}.pdf`}
+                              className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400"
+                            >
+                              <Download className="h-3 w-3" />
+                              <span>تنزيل المرفق</span>
+                            </a>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     {/* Actions bar */}
@@ -2623,11 +2732,11 @@ export default function AdminDashboard() {
 
                         <button
                           type="button"
-                          onClick={() => openLetterGeneratorForRequest(req)}
+                          onClick={() => openResponseModal(req)}
                           className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-red-700 transition cursor-pointer"
                         >
-                          <Printer className="h-3.5 w-3.5" />
-                          <span>تحرير مراسلة رسمية (A4)</span>
+                          <Send className="h-3.5 w-3.5" />
+                          <span>الرد على المطلب وإرفاق وثيقة (PDF)</span>
                         </button>
                       </div>
                     </div>
@@ -2641,187 +2750,363 @@ export default function AdminDashboard() {
 
 
         {/* ============================================================== */}
-        {/* TAB 2: Formal A4 Parliamentary Letter Generator */}
+        {/* ADMIN OFFICIAL RESPONSE & PDF / MESSAGE MODAL DIALOG */}
         {/* ============================================================== */}
-        {activeTab === "letter" && (
-          <div className="space-y-6">
-            {letterSaveMessage && (
-              <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-xs font-bold text-emerald-800 flex items-center gap-2">
-                <Check className="h-4 w-4 text-emerald-600" />
-                <span>{letterSaveMessage}</span>
-              </div>
-            )}
-
-            {/* Letter Controls Header */}
-            <div className="bg-white p-5 rounded-3xl border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800 space-y-4 print:hidden">
-              <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                <Printer className="h-4 w-4 text-red-600" />
-                <span>مولّد المراسلات البرلمانية الرسمية الموجهة للسلطات والوزارات</span>
-              </h3>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                <div>
-                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                    الجهة الموجه إليها الخطاب
-                  </label>
-                  <select
-                    value={letterRecipient}
-                    onChange={(e) => setLetterRecipient(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-300 p-2 text-xs font-semibold dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-100"
-                  >
-                    <option value="السيد والي منوبة">السيد والي منوبة</option>
-                    <option value="السيد معتمد منوبة">السيد معتمد منوبة</option>
-                    <option value="السيد رئيس بلدية الدندان">السيد رئيس بلدية الدندان</option>
-                    <option value="السيد رئيس بلدية منوبة">السيد رئيس بلدية منوبة</option>
-                    <option value="السيد وزير الفلاحة والموارد المائية والصيد البحري">السيد وزير الفلاحة والموارد المائية (SONEDE)</option>
-                    <option value="السيدة وزيرة التجهيز والإسكان">السيدة وزيرة التجهيز والإسكان</option>
-                    <option value="السيد وزير النقل">السيد وزير النقل (TRANSTU)</option>
-                    <option value="السيد وزير الصحة">السيد وزير الصحة</option>
-                    <option value="السيد وزير الشؤون الاجتماعية">السيد وزير الشؤون الاجتماعية</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                    المعرف البرلماني للمراسلة
-                  </label>
-                  <input
-                    type="text"
-                    value={letterReference}
-                    onChange={(e) => setLetterReference(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-300 p-2 text-xs font-mono font-bold dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-100"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                    التاريخ
-                  </label>
-                  <input
-                    type="text"
-                    value={letterDate}
-                    onChange={(e) => setLetterDate(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-300 p-2 text-xs font-semibold dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-100"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                  موضوع المراسلة
-                </label>
-                <input
-                  type="text"
-                  value={letterSubject}
-                  onChange={(e) => setLetterSubject(e.target.value)}
-                  placeholder="موضوع المراسلة..."
-                  className="w-full rounded-xl border border-zinc-300 p-2 text-xs font-bold dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-100"
-                />
-              </div>
-
-              <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-                <label className="flex items-center gap-2 text-xs font-bold text-zinc-800 dark:text-zinc-200 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={letterPublishToRadar}
-                    onChange={(e) => setLetterPublishToRadar(e.target.checked)}
-                    className="h-4 w-4 rounded text-red-600"
-                  />
-                  <span>نشر هذه المراسلة آلياً في &quot;رادار المشاريع والمساءلة&quot; بالصفحة الرئيسية للمواطنين</span>
-                </label>
-
-                <div className="flex items-center gap-2">
-                  {selectedRequest && (
-                    <button
-                      type="button"
-                      onClick={handleSaveAndPublishLetter}
-                      className="rounded-xl bg-zinc-900 text-white px-4 py-2 text-xs font-bold hover:bg-black dark:bg-zinc-100 dark:text-zinc-900 transition cursor-pointer"
-                    >
-                      حفظ وتوثيق بالمطلب
-                    </button>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => window.print()}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-5 py-2 text-xs font-bold text-white shadow hover:bg-red-700 transition cursor-pointer"
-                  >
-                    <Printer className="h-4 w-4" />
-                    <span>طباعة المراسلة الرسمية (A4 / PDF)</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Print-Ready Official A4 Letter Preview: Wrapped in horizontal scroll container for mobile phones */}
-            <div className="w-full overflow-x-auto pb-4">
-              <div className="min-w-[340px] sm:min-w-[640px] max-w-4xl mx-auto bg-white text-zinc-950 p-5 sm:p-12 rounded-2xl sm:rounded-3xl shadow-xl border border-zinc-300 my-4 sm:my-6 print:m-0 print:p-8 print:shadow-none print:border-none font-serif">
-                {/* Official Parliamentary Header */}
-                <div className="flex flex-col sm:flex-row sm:items-start justify-between border-b-2 border-zinc-900 pb-4 sm:pb-6 mb-6 sm:mb-8 gap-3 sm:gap-4">
-                  <div className="text-right space-y-1">
-                    <p className="font-bold text-xs sm:text-sm tracking-wide">الجمهورية التونسية</p>
-                    <p className="font-black text-sm sm:text-base">مجلس نواب الشعب</p>
-                    <p className="text-[11px] sm:text-xs text-zinc-700 font-sans font-bold">
+        {responseModalRequest && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto">
+            <div className="relative w-full max-w-3xl rounded-3xl bg-white p-5 sm:p-8 shadow-2xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 my-6 max-h-[92vh] overflow-y-auto">
+              {/* Modal Header */}
+              <div className="flex items-start justify-between pb-4 border-b border-zinc-200 dark:border-zinc-800 mb-5">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-red-100 text-red-600 dark:bg-red-950/60 dark:text-red-400">
+                    <Send className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base sm:text-lg font-black text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
+                      <span>إرسال رد رسمي للمواطن على المطلب</span>
+                      <span className="font-mono text-red-600 dark:text-red-400">({responseModalRequest.id})</span>
+                    </h3>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
                       المكتب البرلماني للنائب أسماء درويش - دائرة منوبة - الدندان
                     </p>
                   </div>
+                </div>
 
-                  <div className="text-center px-2 sm:px-4">
-                    <div className="inline-flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-full border-2 border-red-600 text-red-600 font-bold text-lg sm:text-xl">
-                      🇹🇳
-                    </div>
+                <button
+                  type="button"
+                  onClick={closeResponseModal}
+                  className="rounded-xl p-2 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 transition cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Response Alert / Feedback */}
+              {responseFeedback && (
+                <div
+                  className={`mb-5 flex items-center gap-2.5 rounded-2xl p-4 text-xs font-bold ${
+                    responseFeedback.type === "success"
+                      ? "border border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300"
+                      : "border border-red-300 bg-red-50 text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
+                  }`}
+                >
+                  {responseFeedback.type === "success" ? (
+                    <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
+                  ) : (
+                    <AlertCircle className="h-5 w-5 shrink-0 text-red-600" />
+                  )}
+                  <span>{responseFeedback.message}</span>
+                </div>
+              )}
+
+              {/* Citizen Information & Original Request Recap */}
+              <div className="rounded-2xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-800/40 mb-6 space-y-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  <div>
+                    <span className="text-zinc-400 block text-[11px]">صاحب المطلب:</span>
+                    <span className="font-bold text-zinc-900 dark:text-zinc-100">{responseModalRequest.citizenName}</span>
                   </div>
-
-                  <div className="text-right sm:text-left font-mono text-[11px] sm:text-xs space-y-1 text-zinc-700">
-                    <p>تونس في: {letterDate}</p>
-                    <p>العدد: {letterReference}</p>
+                  <div>
+                    <span className="text-zinc-400 block text-[11px]">الهاتف:</span>
+                    <span className="font-mono font-bold text-zinc-900 dark:text-zinc-100">{responseModalRequest.phone}</span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-400 block text-[11px]">العمادة / المنطقة:</span>
+                    <span className="font-bold text-zinc-900 dark:text-zinc-100">{responseModalRequest.zone}</span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-400 block text-[11px]">القطاع:</span>
+                    <span className="font-bold text-zinc-900 dark:text-zinc-100">{responseModalRequest.category}</span>
                   </div>
                 </div>
 
-                {/* Addressee Block */}
-                <div className="my-6 sm:my-8 text-center sm:text-right">
-                  <p className="text-sm sm:text-base font-bold">إلى جناب:</p>
-                  <p className="text-base sm:text-lg font-black text-zinc-900 mt-1">
-                    {letterRecipient}
-                  </p>
-                </div>
-
-                {/* Subject */}
-                <div className="my-5 sm:my-6 rounded-xl bg-zinc-100/70 p-3 sm:p-4 border border-zinc-200">
-                  <p className="text-xs sm:text-sm font-black">
-                    الموضوع: <span className="font-normal">{letterSubject}</span>
-                  </p>
-                </div>
-
-                {/* Body */}
-                <div className="my-6 sm:my-8 text-xs sm:text-sm leading-relaxed text-justify space-y-4 font-sans">
-                  <textarea
-                    rows={10}
-                    value={letterBody}
-                    onChange={(e) => setLetterBody(e.target.value)}
-                    className="w-full bg-transparent border-0 p-0 text-xs sm:text-sm leading-relaxed focus:outline-none resize-none print:resize-none"
-                  />
-                </div>
-
-                {/* Signature & Stamp */}
-                <div className="mt-12 sm:mt-16 pt-6 sm:pt-8 flex flex-col sm:flex-row items-center sm:items-end justify-between gap-4 text-xs font-sans">
-                  <div className="text-zinc-500 text-center sm:text-right">
-                    <p>المرفقات: نسخة من عريضة المواطن والإحداثيات</p>
-                  </div>
-
-                  <div className="text-center space-y-6 sm:space-y-10">
-                    <div>
-                      <p className="font-bold text-xs sm:text-sm">النائب أسماء درويش</p>
-                      <p className="text-[11px] sm:text-xs text-zinc-600 font-sans">نائب الشعب عن دائرة منوبة - الدندان</p>
-                    </div>
-                    <div className="h-12 sm:h-14 flex items-center justify-center">
-                      <span className="font-mono text-[10px] sm:text-xs text-zinc-400 italic">
-                        [الإمضاء والختم الرسمي للنائب أسماء درويش]
+                {/* Email notification status banner */}
+                {responseEmailInput ? (
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl bg-emerald-50 px-3.5 py-2.5 text-xs text-emerald-800 border border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-900/50 dark:text-emerald-300">
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-4 w-4 text-emerald-600 shrink-0" />
+                      <span>
+                        بريد المواطن المستهدف: <strong className="font-mono">{responseEmailInput}</strong>
                       </span>
                     </div>
+                    <label className="flex items-center gap-1.5 font-bold cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={responseSendEmail}
+                        onChange={(e) => setResponseSendEmail(e.target.checked)}
+                        className="h-4 w-4 rounded text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <span>إرسال إشعار فوري عبر Resend</span>
+                    </label>
+                  </div>
+                ) : (
+                  <div className="rounded-xl bg-zinc-100 p-3 text-xs text-zinc-600 dark:bg-zinc-800/80 dark:text-zinc-400 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-4 w-4 text-zinc-400 shrink-0" />
+                      <span>المواطن لم يسجل بريده عند تقديم المطلب. يمكنك إضافة بريده هنا لإشعاره بالرد:</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="email"
+                        value={responseEmailInput}
+                        onChange={(e) => {
+                          setResponseEmailInput(e.target.value);
+                          if (e.target.value) setResponseSendEmail(true);
+                        }}
+                        placeholder="أدخل بريد المواطن (مثال: citizen@gmail.com)..."
+                        className="flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs text-zinc-900 focus:border-red-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                      />
+                      {responseEmailInput && (
+                        <label className="flex items-center gap-1.5 font-bold text-emerald-700 dark:text-emerald-300 cursor-pointer text-[11px] whitespace-nowrap">
+                          <input
+                            type="checkbox"
+                            checked={responseSendEmail}
+                            onChange={(e) => setResponseSendEmail(e.target.checked)}
+                            className="h-3.5 w-3.5 rounded text-emerald-600"
+                          />
+                          <span>تفعيل الإرسال</span>
+                        </label>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Original request text */}
+                <div className="text-xs pt-1">
+                  <span className="text-zinc-400 block text-[11px] mb-1">نص المطلب المودع من المواطن:</span>
+                  <p className="bg-white dark:bg-zinc-900 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 text-zinc-800 dark:text-zinc-200 leading-relaxed font-medium">
+                    {responseModalRequest.description}
+                  </p>
+                </div>
+
+                {/* Audio player if voice complaint */}
+                {responseModalRequest.audioBase64 && (
+                  <div className="bg-red-50/70 dark:bg-red-950/20 p-2.5 rounded-xl border border-red-200/80 dark:border-red-900/40">
+                    <span className="text-[11px] font-bold text-red-700 dark:text-red-300 flex items-center gap-1 mb-1.5">
+                      <Volume2 className="h-3.5 w-3.5" />
+                      التسجيل الصوتي المرفق من المواطن:
+                    </span>
+                    <audio controls src={responseModalRequest.audioBase64} className="w-full h-8" />
+                  </div>
+                )}
+              </div>
+
+              {/* Response Form */}
+              <form onSubmit={handleSubmitResponse} className="space-y-5">
+                {/* 1. Status Selection */}
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-2">
+                    تحديث حالة المطلب بعد المعالجة: <span className="text-red-600">*</span>
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                    {(["بصدد الدرس", "تمت مراسلة الوزارة/البلدية", "تم الحل", "جديد"] as ComplaintStatus[]).map((st) => (
+                      <button
+                        key={st}
+                        type="button"
+                        onClick={() => setResponseStatus(st)}
+                        className={`p-2.5 rounded-xl font-bold border transition text-center cursor-pointer ${
+                          responseStatus === st
+                            ? st === "تم الحل"
+                              ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
+                              : "bg-red-600 text-white border-red-600 shadow-sm"
+                            : "border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                        }`}
+                      >
+                        {st}
+                      </button>
+                    ))}
                   </div>
                 </div>
-              </div>
+
+                {/* 2. Feedback Message */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                      نص الرد والتوجيه الرسمي للمواطن: <span className="text-red-600">*</span>
+                    </label>
+                    <span className="text-[11px] text-zinc-400">
+                      يظهر فوراً في شاشة التتبع ويُرسل في الإشعار البريدي
+                    </span>
+                  </div>
+                  <textarea
+                    rows={4}
+                    required
+                    value={responseNote}
+                    onChange={(e) => setResponseNote(e.target.value)}
+                    placeholder="اكتب رد وإفادة مكتب النائب أسماء درويش للمواطن (مثال: تم التنسيق مع مصالح بلدية منوبة/الدندان للتدخل الميداني، أو تمت مراسلة الوزارة مع تحديد الخطوات القادمة)..."
+                    className="w-full rounded-2xl border border-zinc-300 bg-white p-3.5 text-xs text-zinc-900 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 leading-relaxed"
+                  />
+
+                  {/* Quick Preset Buttons */}
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <span className="text-[11px] text-zinc-400 font-medium">نماذج سريعة:</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setResponseNote(
+                          `تم بحمد الله التدخل الميداني بالتنسيق التام بين المكتب البرلماني للنائب أسماء درويش والمصالح البلدية/الجهوية المختصة لفض هذا الإشكال بـ ${responseModalRequest.zone}.`
+                        )
+                      }
+                      className="rounded-lg bg-zinc-100 px-2 py-1 text-[11px] text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 transition cursor-pointer"
+                    >
+                      تم التدخل وحل الإشكال
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setResponseNote(
+                          `تم توجيه مراسلة رسمية ومساءلة برلمانية إلى الجهة الحكومية المختصة لمتابعة هذا الملف بصفة عاجلة وإجراء المعاينة الميدانية بـ ${responseModalRequest.zone}.`
+                        )
+                      }
+                      className="rounded-lg bg-zinc-100 px-2 py-1 text-[11px] text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 transition cursor-pointer"
+                    >
+                      تمت مراسلة ومساءلة الوزارة
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setResponseNote(
+                          `الملف قيد الدرس والتدقيق الميداني حالياً من قبل الفريق البرلماني للنائب أسماء درويش لإعداد المراسلات والتدخلات اللازمة.`
+                        )
+                      }
+                      className="rounded-lg bg-zinc-100 px-2 py-1 text-[11px] text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 transition cursor-pointer"
+                    >
+                      بصدد الدرس والتدقيق
+                    </button>
+                  </div>
+                </div>
+
+                {/* 3. PDF Attachment or Instant PDF Generation */}
+                <div className="rounded-2xl border border-zinc-200 bg-zinc-50/60 p-4 dark:border-zinc-800 dark:bg-zinc-800/40 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                      وثيقة الرد الرسمية بصيغة PDF (اختياري / مرفق رسمي):
+                    </label>
+                    <span className="text-[11px] text-zinc-400">
+                      تظهر للمواطن كزر تحميل مباشر لوثيقة رسمية
+                    </span>
+                  </div>
+
+                  {responsePdfBase64 ? (
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl bg-white p-3.5 border border-emerald-300 dark:bg-zinc-900 dark:border-emerald-800">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-100 text-red-600 dark:bg-red-950/60 font-bold text-xs">
+                          PDF
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                            {responsePdfName || `رد_رسمي_${responseModalRequest.id}.pdf`}
+                          </p>
+                          <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 font-bold">
+                            <Check className="h-3 w-3" />
+                            جاهز ومرفق بالرد
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={responsePdfBase64}
+                          download={responsePdfName || `رد_رسمي_${responseModalRequest.id}.pdf`}
+                          className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 transition cursor-pointer"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                          <span>معاينة وتنزيل</span>
+                        </a>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setResponsePdfBase64(null);
+                            setResponsePdfName("");
+                          }}
+                          className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-bold text-red-600 hover:bg-red-100 dark:bg-red-950/40 dark:border-red-900/60 dark:text-red-400 transition cursor-pointer"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          <span>إزالة</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col sm:flex-row items-center gap-2.5 pt-1">
+                      {/* Button to generate official PDF automatically */}
+                      <button
+                        type="button"
+                        disabled={isGeneratingPdf}
+                        onClick={handleGeneratePdfForResponse}
+                        className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-zinc-900 px-4 py-2.5 text-xs font-bold text-white hover:bg-black dark:bg-zinc-100 dark:text-zinc-900 transition disabled:opacity-60 cursor-pointer shadow-sm"
+                      >
+                        {isGeneratingPdf ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span>جارٍ إنشاء الوثيقة الرسمية...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="h-4 w-4 text-red-500" />
+                            <span>توليد وثيقة رد رسمية PDF فورياً</span>
+                          </>
+                        )}
+                      </button>
+
+                      {/* File upload for custom PDF */}
+                      <label className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 py-2.5 text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 transition cursor-pointer shadow-sm">
+                        <Paperclip className="h-4 w-4 text-zinc-500" />
+                        <span>أو تحميل ملف PDF من جهازك</span>
+                        <input
+                          type="file"
+                          accept="application/pdf"
+                          onChange={handlePdfUpload}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  )}
+                </div>
+
+                {/* 4. Publish to Radar Checkbox */}
+                <div className="pt-1">
+                  <label className="flex items-center gap-2 text-xs font-bold text-zinc-800 dark:text-zinc-200 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={responsePublishRadar}
+                      onChange={(e) => setResponsePublishRadar(e.target.checked)}
+                      className="h-4 w-4 rounded text-red-600 focus:ring-red-500"
+                    />
+                    <span>نشر هذا التدخل آلياً في &quot;رادار المشاريع والمساءلة&quot; بالصفحة الرئيسية</span>
+                  </label>
+                </div>
+
+                {/* Modal Footer Actions */}
+                <div className="flex flex-col sm:flex-row items-center justify-end gap-2.5 pt-4 border-t border-zinc-200 dark:border-zinc-800">
+                  <button
+                    type="button"
+                    onClick={closeResponseModal}
+                    disabled={isSubmittingResponse}
+                    className="w-full sm:w-auto rounded-xl border border-zinc-300 bg-white px-5 py-2.5 text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 transition cursor-pointer"
+                  >
+                    إلغاء
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={isSubmittingResponse || !responseNote.trim()}
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-6 py-2.5 text-xs font-bold text-white shadow-md shadow-red-600/20 hover:bg-red-700 transition disabled:opacity-50 cursor-pointer"
+                  >
+                    {isSubmittingResponse ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>جارٍ إرسال الرد وتحديث المطلب...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send className="h-4 w-4" />
+                        <span>إرسال الرد وتحديث المطلب</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}

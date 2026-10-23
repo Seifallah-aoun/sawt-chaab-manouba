@@ -17,7 +17,8 @@ import {
   ExternalLink,
   Calendar,
   User,
-  Mic
+  Mic,
+  Download
 } from "lucide-react";
 import { Complaint, ComplaintStatus } from "@/lib/types";
 
@@ -74,23 +75,59 @@ export default function ComplaintTracker({ initialSearchQuery = "" }: ComplaintT
     }
   }, [initialSearchQuery]);
 
-  const performSearch = async (searchTarget: string) => {
+  // Real-time synchronization when admin replies or status changes
+  useEffect(() => {
+    const handleUpdate = () => {
+      if (selectedComplaint?.id) {
+        performSearch(selectedComplaint.id, true);
+      } else if (query && query.trim().length >= 4) {
+        performSearch(query.trim(), true);
+      }
+    };
+
+    window.addEventListener("mp_data_updated", handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+
+    let bc: BroadcastChannel | null = null;
+    try {
+      if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+        bc = new BroadcastChannel("mp_data_sync");
+        bc.onmessage = () => handleUpdate();
+      }
+    } catch {}
+
+    return () => {
+      window.removeEventListener("mp_data_updated", handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+      bc?.close();
+    };
+  }, [selectedComplaint?.id, query]);
+
+  const performSearch = async (searchTarget: string, silent = false) => {
     const term = searchTarget.trim();
     if (!term) {
-      setError("الرجاء إدخال رمز المتابعة أو رقم الهاتف.");
+      if (!silent) setError("الرجاء إدخال رمز المتابعة أو رقم الهاتف.");
       return;
     }
 
-    setIsLoading(true);
-    setError(null);
-    setSelectedComplaint(null);
-    setMultipleResults([]);
+    if (!silent) {
+      setIsLoading(true);
+      setError(null);
+      setSelectedComplaint(null);
+      setMultipleResults([]);
+    }
 
     try {
       const isPhone = /^\d{8}$/.test(term.replace(/\s+/g, ""));
       const param = isPhone ? `phone=${encodeURIComponent(term.replace(/\s+/g, ""))}` : `id=${encodeURIComponent(term)}`;
 
-      const res = await fetch(`/api/complaints?${param}`);
+      const res = await fetch(`/api/complaints?${param}&t=${Date.now()}`, {
+        cache: "no-store",
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+        },
+      });
       const data = await res.json();
 
       if (!res.ok) {
@@ -109,10 +146,14 @@ export default function ComplaintTracker({ initialSearchQuery = "" }: ComplaintT
         throw new Error("لم يتم العثور على أي مطلب مسجل.");
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "تعذر استرجاع حالة المطلب.";
-      setError(msg);
+      if (!silent) {
+        const msg = err instanceof Error ? err.message : "تعذر استرجاع حالة المطلب.";
+        setError(msg);
+      }
     } finally {
-      setIsLoading(false);
+      if (!silent) {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -390,18 +431,54 @@ export default function ComplaintTracker({ initialSearchQuery = "" }: ComplaintT
               </div>
             </div>
 
-            {/* MP Public Note (ملاحظة مكتب النائب أسماء درويش) */}
-            {selectedComplaint.publicNote && (
-              <div className="mt-8 rounded-2xl border border-red-200 bg-red-50/50 p-5 dark:border-red-900/60 dark:bg-red-950/20">
-                <div className="flex items-center gap-2 mb-2 text-red-700 dark:text-red-400">
-                  <Building2 className="h-5 w-5" />
-                  <span className="text-sm font-bold">
-                    إفادة وتوجيه مكتب النائب أسماء درويش:
-                  </span>
+            {/* MP Public Note / Official Response (إفادة ورد مكتب النائب أسماء درويش) */}
+            {(selectedComplaint.publicNote || selectedComplaint.adminPublicNote || selectedComplaint.adminResponsePdf) && (
+              <div className="mt-8 rounded-2xl border-2 border-emerald-500/40 bg-emerald-50/70 p-5 dark:border-emerald-500/30 dark:bg-emerald-950/20 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-3 pb-3 border-b border-emerald-200/70 dark:border-emerald-900/50">
+                  <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300">
+                    <Building2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                    <span className="text-sm font-bold">
+                      إفادة وردّ مكتب النائب أسماء درويش:
+                    </span>
+                  </div>
+                  {selectedComplaint.adminResponseDate && (
+                    <span className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">
+                      تاريخ التحيين: {formatDate(selectedComplaint.adminResponseDate)}
+                    </span>
+                  )}
                 </div>
-                <p className="text-sm text-zinc-800 dark:text-zinc-200 leading-relaxed font-medium">
-                  {selectedComplaint.publicNote}
-                </p>
+                {(selectedComplaint.adminPublicNote || selectedComplaint.publicNote) && (
+                  <p className="text-sm text-zinc-900 dark:text-zinc-100 leading-relaxed font-medium">
+                    {selectedComplaint.adminPublicNote || selectedComplaint.publicNote}
+                  </p>
+                )}
+                {selectedComplaint.adminResponsePdf && (
+                  <div className="mt-4 pt-3 border-t border-emerald-200/70 dark:border-emerald-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white/90 dark:bg-zinc-900/90 p-3.5 rounded-xl border border-emerald-300/40">
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-100 text-red-600 dark:bg-red-950/50 dark:text-red-400 font-bold text-xs uppercase">
+                        PDF
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                          {selectedComplaint.adminResponsePdfName || `مراسلة_رسمية_${selectedComplaint.id}.pdf`}
+                        </p>
+                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                          وثيقة رسمية صادرة من المكتب البرلماني
+                        </p>
+                      </div>
+                    </div>
+                    <a
+                      href={selectedComplaint.adminResponsePdf}
+                      download={selectedComplaint.adminResponsePdfName || `Reponse-${selectedComplaint.id}.pdf`}
+                      target={selectedComplaint.adminResponsePdf?.startsWith("http") ? "_blank" : undefined}
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-700 transition shadow-sm cursor-pointer"
+                    >
+                      <Download className="h-4 w-4" />
+                      <span>تحميل الرد الرسمي (PDF)</span>
+                    </a>
+                  </div>
+                )}
               </div>
             )}
 

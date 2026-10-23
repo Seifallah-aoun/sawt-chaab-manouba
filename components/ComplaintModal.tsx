@@ -15,7 +15,8 @@ import {
   Mic,
   Trash2,
   ShieldCheck,
-  Compass
+  Compass,
+  Mail
 } from "lucide-react";
 import VoiceRecorder from "./VoiceRecorder";
 import { ComplaintCategory, ComplaintPriority, GPSLocation, Complaint } from "@/lib/types";
@@ -60,6 +61,7 @@ export default function ComplaintModal({
   const [currentMode, setCurrentMode] = useState<ModalMode>(mode);
   const [citizenName, setCitizenName] = useState("");
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [zone, setZone] = useState<string>(MANOUBA_DEN_DEN_ZONES[0]);
   const [category, setCategory] = useState<ComplaintCategory>("الماء والتطهير");
   const [priority, setPriority] = useState<ComplaintPriority>("عادي");
@@ -206,6 +208,7 @@ export default function ComplaintModal({
         body: JSON.stringify({
           citizenName: citizenName.trim(),
           phone: cleanPhone,
+          email: email.trim() || undefined,
           zone,
           category,
           priority,
@@ -371,6 +374,7 @@ export default function ComplaintModal({
                     setCreatedComplaint(null);
                     setCitizenName("");
                     setPhone("");
+                    setEmail("");
                     setDescription("");
                     setVoiceNoteOptional("");
                     setAudioBase64(null);
@@ -415,7 +419,7 @@ export default function ComplaintModal({
                 </div>
               )}
 
-              {/* CITIZEN INFORMATION: Full Name & Tunisian Phone (NO CIN) */}
+              {/* CITIZEN INFORMATION: Full Name, Tunisian Phone & Optional Email */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
@@ -442,6 +446,25 @@ export default function ComplaintModal({
                     value={phone}
                     onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))}
                     placeholder="مثال: 98123456"
+                    className="w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 placeholder-zinc-400 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 text-left dir-ltr"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                      البريد الإلكتروني (اختياري)
+                    </label>
+                    <span className="text-[11px] text-zinc-500 dark:text-zinc-400 flex items-center gap-1">
+                      <Mail className="h-3 w-3 text-red-500" />
+                      لتلقي إشعار فوري وتحديثات رسمية عند إجابة النائب
+                    </span>
+                  </div>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="name@example.com (اختياري)"
                     className="w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 placeholder-zinc-400 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 text-left dir-ltr"
                   />
                 </div>

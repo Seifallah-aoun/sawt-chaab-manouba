@@ -19,6 +19,7 @@ import {
 } from "@/lib/supabase";
 import { getStoreItem, setStoreItem } from "@/lib/platform-store";
 import { Complaint, ComplaintCategory, ComplaintPriority, ProjectItem } from "@/lib/types";
+import { sendCitizenResponseEmail } from "@/lib/email";
 
 const NO_CACHE_HEADERS = {
   "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
@@ -106,6 +107,7 @@ export async function POST(request: NextRequest) {
     const { 
       citizenName, 
       phone, 
+      email,
       zone, 
       category, 
       description, 
@@ -155,11 +157,14 @@ export async function POST(request: NextRequest) {
     // Generate unique tracking ID formatted as TN-XXXX
     const ticketId = `TN-${Math.floor(1000 + Math.random() * 9000)}`;
 
+    const cleanEmail = email && typeof email === "string" && email.includes("@") ? email.trim() : undefined;
+
     const newComplaint: Complaint = {
       id: ticketId,
       createdAt: new Date().toISOString(),
       citizenName: citizenName.trim(),
       phone: cleanPhone,
+      email: cleanEmail,
       zone: zone.trim(),
       category: (category as ComplaintCategory) || "أخرى",
       type: isVoiceMode ? "voice" : "petition",
@@ -214,7 +219,12 @@ export async function PATCH(request: NextRequest) {
       id, 
       status, 
       adminPublicNote,
+      adminReply,
       publicNote, 
+      adminResponsePdf,
+      adminResponsePdfName,
+      replyPdfUrl,
+      sendEmailNotification,
       officialLetterDraft,
       officialLetterText, 
       targetMinistry, 
@@ -228,15 +238,24 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "معرف المطلب مفقود." }, { status: 400 });
     }
 
+    const note = adminReply !== undefined ? adminReply : (adminPublicNote !== undefined ? adminPublicNote : publicNote);
+    const pdf = replyPdfUrl !== undefined ? replyPdfUrl : adminResponsePdf;
+
     const updates = {
       ...(status && { status }),
-      adminPublicNote: adminPublicNote !== undefined ? adminPublicNote : publicNote,
-      publicNote: adminPublicNote !== undefined ? adminPublicNote : publicNote,
+      adminPublicNote: note,
+      adminReply: note,
+      publicNote: note,
+      ...(pdf !== undefined && { adminResponsePdf: pdf }),
+      ...(pdf !== undefined && { replyPdfUrl: pdf }),
+      ...(adminResponsePdfName !== undefined && { adminResponsePdfName }),
+      ...(note || pdf ? { adminResponseDate: new Date().toISOString() } : {}),
       officialLetterDraft: officialLetterDraft !== undefined ? officialLetterDraft : officialLetterText,
       officialLetterText: officialLetterDraft !== undefined ? officialLetterDraft : officialLetterText,
       ...(targetMinistry !== undefined && { targetMinistry }),
       ...(priority && { priority }),
       ...(publishToProjects !== undefined && { publishedToProjects: publishToProjects }),
+      ...(body.email && { email: body.email.trim() }),
     };
 
     // 1. Update Supabase Cloud
@@ -296,10 +315,50 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
+    // Automated Email Notification to Citizen if email is registered
+    let emailDispatched = false;
+    let emailSimulated = false;
+    let emailMessageId: string | undefined = undefined;
+    let emailError: string | undefined = undefined;
+    let emailWarning: string | undefined = undefined;
+    let senderUsed: string | undefined = undefined;
+    const citizenEmail = (updated.email || body.email || "").trim();
+
+    if (citizenEmail && sendEmailNotification !== false && (note || status)) {
+      try {
+        const emailRes = await sendCitizenResponseEmail({
+          to: citizenEmail,
+          citizenName: updated.citizenName,
+          ticketId: updated.id,
+          status: updated.status,
+          feedbackMessage: note || updated.adminPublicNote || updated.publicNote || "تمت معالجة وتحيين مطلبكم من قبل مكتب النائب أسماء درويش.",
+          pdfName: updated.adminResponsePdfName,
+          pdfBase64: updated.adminResponsePdf,
+          pdfUrl: body.replyPdfUrl || updated.adminResponsePdf,
+        });
+        emailDispatched = Boolean(emailRes.success);
+        emailSimulated = Boolean(emailRes.simulated);
+        emailMessageId = emailRes.messageId;
+        emailError = emailRes.error;
+        emailWarning = emailRes.warning;
+        senderUsed = emailRes.senderUsed;
+      } catch (emailErr: any) {
+        console.warn("[requests-api] Automated email dispatch error:", emailErr);
+        emailError = emailErr?.message || "خطأ غير متوقع أثناء إرسال البريد.";
+      }
+    }
+
     return NextResponse.json({
       success: true,
       message: "تم تحديث بيانات المطلب بنجاح في قاعدة البيانات السحابية Supabase.",
       complaint: updated,
+      emailDispatched,
+      emailSimulated,
+      emailMessageId,
+      emailError,
+      emailWarning,
+      senderUsed,
+      citizenEmail: citizenEmail || null,
     });
   } catch (error) {
     console.error("Error in PATCH /api/requests:", error);

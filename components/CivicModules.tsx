@@ -160,15 +160,24 @@ export default function CivicModules({ refreshTrigger = 0 }: CivicModulesProps) 
   const [homeNewsFilter, setHomeNewsFilter] = useState<"all" | "parliament" | "regional" | "urgent">("all");
 
   // Fetch real-time data from backend APIs
-  const fetchAllData = useCallback(() => {
-    setLoadingRequests(true);
+  const fetchAllData = useCallback((isInitial: boolean | unknown = false) => {
+    const showLoading = isInitial === true;
+    if (showLoading) {
+      setLoadingRequests(true);
+      setLoadingProjects(true);
+      setLoadingNews(true);
+      setLoadingGuides(true);
+      setLoadingYouth(true);
+    }
     fetch(`/api/requests?t=${Date.now()}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
         setRequests(Array.isArray(d.complaints) ? d.complaints : []);
       })
       .catch((err) => console.error("Error loading requests for stats:", err))
-      .finally(() => setLoadingRequests(false));
+      .finally(() => {
+        if (showLoading) setLoadingRequests(false);
+      });
 
     fetch(`/api/projects?t=${Date.now()}`, { cache: "no-store" })
       .then((r) => r.json())
@@ -176,7 +185,9 @@ export default function CivicModules({ refreshTrigger = 0 }: CivicModulesProps) 
         if (Array.isArray(d.projects)) setProjects(d.projects);
       })
       .catch((err) => console.error("Error loading projects:", err))
-      .finally(() => setLoadingProjects(false));
+      .finally(() => {
+        if (showLoading) setLoadingProjects(false);
+      });
 
     fetch("/api/polls")
       .then((r) => r.json())
@@ -191,7 +202,9 @@ export default function CivicModules({ refreshTrigger = 0 }: CivicModulesProps) 
         if (d.news) setNewsFeed(d.news);
       })
       .catch((err) => console.error("Error loading news feed:", err))
-      .finally(() => setLoadingNews(false));
+      .finally(() => {
+        if (showLoading) setLoadingNews(false);
+      });
 
     fetch(`/api/guides?t=${Date.now()}`, { cache: "no-store" })
       .then((r) => r.json())
@@ -199,7 +212,9 @@ export default function CivicModules({ refreshTrigger = 0 }: CivicModulesProps) 
         if (Array.isArray(d.guides)) setGuides(d.guides);
       })
       .catch((err) => console.error("Error loading administrative guides:", err))
-      .finally(() => setLoadingGuides(false));
+      .finally(() => {
+        if (showLoading) setLoadingGuides(false);
+      });
 
     fetch(`/api/youth?t=${Date.now()}`, { cache: "no-store" })
       .then((r) => r.json())
@@ -207,7 +222,9 @@ export default function CivicModules({ refreshTrigger = 0 }: CivicModulesProps) 
         if (Array.isArray(d.programs)) setYouthPrograms(d.programs);
       })
       .catch((err) => console.error("Error loading youth programs:", err))
-      .finally(() => setLoadingYouth(false));
+      .finally(() => {
+        if (showLoading) setLoadingYouth(false);
+      });
 
     fetch(`/api/appointments?t=${Date.now()}`, { cache: "no-store" })
       .then((r) => r.json())
@@ -230,7 +247,7 @@ export default function CivicModules({ refreshTrigger = 0 }: CivicModulesProps) 
   }, []);
 
   useEffect(() => {
-    fetchAllData();
+    fetchAllData(true);
   }, [fetchAllData, refreshTrigger]);
 
   // Instant real-time synchronization with Admin dashboard & cross-tab events
@@ -240,7 +257,7 @@ export default function CivicModules({ refreshTrigger = 0 }: CivicModulesProps) 
       if (typeof window !== "undefined" && "BroadcastChannel" in window) {
         bc = new BroadcastChannel("mp_data_sync");
         bc.onmessage = () => {
-          fetchAllData();
+          fetchAllData(false);
         };
       }
     } catch {
@@ -249,18 +266,18 @@ export default function CivicModules({ refreshTrigger = 0 }: CivicModulesProps) 
 
     const handleStorage = (e: StorageEvent) => {
       if (e.key === "mp_last_update") {
-        fetchAllData();
+        fetchAllData(false);
       }
     };
     window.addEventListener("storage", handleStorage);
 
     const handleCustomEvent = () => {
-      fetchAllData();
+      fetchAllData(false);
     };
     window.addEventListener("mp_data_updated", handleCustomEvent);
 
-    // Continuous background sync every 3 seconds
-    const interval = setInterval(fetchAllData, 3000);
+    // Smooth periodic background fallback sync (15 seconds)
+    const interval = setInterval(() => fetchAllData(false), 15000);
 
     return () => {
       bc?.close();

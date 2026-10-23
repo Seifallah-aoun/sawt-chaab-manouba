@@ -140,7 +140,7 @@ export default function LiveTownHall() {
     checkStorageLive();
 
     refreshAll();
-    const interval = setInterval(refreshAll, 1200);
+    const interval = setInterval(refreshAll, 10000);
 
     const handleSync = () => refreshAll();
     const handleStorage = (e: StorageEvent) => {
