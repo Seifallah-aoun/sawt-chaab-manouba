@@ -146,8 +146,10 @@ export default function LiveTownHall() {
     const handleStorage = (e: StorageEvent) => {
       if (e.key === "mp_stream_is_live") {
         setLiveStatus((prev) => ({ ...prev, isLive: e.newValue === "true" }));
+        refreshAll();
+      } else if (e.key === "mp_last_update") {
+        refreshAll();
       }
-      refreshAll();
     };
 
     window.addEventListener("mp_data_updated", handleSync);

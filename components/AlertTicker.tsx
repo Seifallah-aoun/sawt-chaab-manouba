@@ -65,9 +65,10 @@ export default function AlertTicker() {
     const interval = setInterval(fetchNews, 15000);
 
     const handleSync = () => fetchNews();
-    window.addEventListener("storage", (e) => {
+    const handleStorage = (e: StorageEvent) => {
       if (e.key === "mp_last_update") fetchNews();
-    });
+    };
+    window.addEventListener("storage", handleStorage);
     window.addEventListener("mp_data_updated", handleSync);
 
     let bc: BroadcastChannel | null = null;
@@ -80,6 +81,7 @@ export default function AlertTicker() {
 
     return () => {
       clearInterval(interval);
+      window.removeEventListener("storage", handleStorage);
       window.removeEventListener("mp_data_updated", handleSync);
       bc?.close();
     };

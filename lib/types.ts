@@ -247,4 +247,35 @@ export interface YouthRequest {
   notes?: string;
 }
 
+export type ProposalType = 'مقترح قانون' | 'مسائلة كتابية' | 'مبادرة تشريعية';
+
+export type ProposalStatus = 
+  | 'قيد الدرس باللجنة' 
+  | 'في انتظار التقرير' 
+  | 'جاهز للجلسة العامة' 
+  | 'تمت المصادقة' 
+  | 'مُجاب عنها' 
+  | 'في انتظار الرد';
+
+export interface LegislativeProposal {
+  id: string;
+  number: string;
+  title: string;
+  type: ProposalType;
+  depositDate: string;
+  year: number;
+  committee: string;
+  status: ProposalStatus;
+  arpUrl?: string;
+  summary: string;
+  pdfUrl?: string;
+  pdfName?: string;
+  targetAuthority?: string;
+  signatories?: string;
+  isMpInitiative?: boolean;
+  mpRole?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 

@@ -54,13 +54,19 @@ import {
   YouthProgram,
   YouthProgramCategory,
   YOUTH_PROGRAM_CATEGORIES,
-  YouthRequest
+  YouthRequest,
+  LegislativeProposal,
+  ProposalType,
+  ProposalStatus
 } from "@/lib/types";
+import { INITIAL_PROPOSALS } from "@/lib/proposals-data";
+import { generateLegislativeProposalPdf } from "@/lib/generate-proposal-pdf";
 
-type CivicTab = "analytics" | "projects" | "guide" | "youth" | "polls";
+type CivicTab = "analytics" | "projects" | "proposals" | "guide" | "youth" | "polls";
 
 interface CivicModulesProps {
   refreshTrigger?: number;
+  onOpenProposalsModal?: () => void;
 }
 
 const MANOUBA_DISTRICT_ZONES = [
@@ -72,7 +78,7 @@ const MANOUBA_DISTRICT_ZONES = [
   "قصر السعيد",
 ];
 
-export default function CivicModules({ refreshTrigger = 0 }: CivicModulesProps) {
+export default function CivicModules({ refreshTrigger = 0, onOpenProposalsModal }: CivicModulesProps) {
   const [activeTab, setActiveTab] = useState<CivicTab>("analytics");
 
   const handleSelectTab = (tab: CivicTab) => {
@@ -159,6 +165,32 @@ export default function CivicModules({ refreshTrigger = 0 }: CivicModulesProps) 
   const [loadingNews, setLoadingNews] = useState(true);
   const [homeNewsFilter, setHomeNewsFilter] = useState<"all" | "parliament" | "regional" | "urgent">("all");
 
+  // Legislative Proposals state
+  const [proposals, setProposals] = useState<LegislativeProposal[]>(INITIAL_PROPOSALS);
+  const [proposalSearch, setProposalSearch] = useState("");
+  const [proposalType, setProposalType] = useState<string>("الكل");
+  const [proposalYear, setProposalYear] = useState<string>("الكل");
+  const [proposalOnlyMp, setProposalOnlyMp] = useState<boolean>(false);
+  const [proposalGeneratingPdfId, setProposalGeneratingPdfId] = useState<string | null>(null);
+  const [proposalCopiedId, setProposalCopiedId] = useState<string | null>(null);
+
+  // Listen to external request to open proposals tab
+  useEffect(() => {
+    const handleOpenProposalsEvent = () => {
+      setActiveTab("proposals");
+      if (typeof window !== "undefined") {
+        setTimeout(() => {
+          const contentEl = document.getElementById("active-civic-content");
+          contentEl?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 100);
+      }
+    };
+    window.addEventListener("open-proposals-modal", handleOpenProposalsEvent);
+    return () => {
+      window.removeEventListener("open-proposals-modal", handleOpenProposalsEvent);
+    };
+  }, []);
+
   // Fetch real-time data from backend APIs
   const fetchAllData = useCallback((isInitial: boolean | unknown = false) => {
     const showLoading = isInitial === true;
@@ -225,6 +257,13 @@ export default function CivicModules({ refreshTrigger = 0 }: CivicModulesProps) 
       .finally(() => {
         if (showLoading) setLoadingYouth(false);
       });
+
+    fetch(`/api/proposals?t=${Date.now()}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => {
+        if (Array.isArray(d.proposals) && d.proposals.length > 0) setProposals(d.proposals);
+      })
+      .catch((err) => console.error("Error loading proposals in civic modules:", err));
 
     fetch(`/api/appointments?t=${Date.now()}`, { cache: "no-store" })
       .then((r) => r.json())
@@ -536,6 +575,95 @@ export default function CivicModules({ refreshTrigger = 0 }: CivicModulesProps) 
     return matchTitle || matchInst || matchDesc || matchAudience || matchCriteria || matchDocs;
   });
 
+  const handleDownloadCivicProposalPdf = async (prop: LegislativeProposal) => {
+    try {
+      setProposalGeneratingPdfId(prop.id);
+      if (prop.pdfUrl && prop.pdfUrl.trim()) {
+        const url = prop.pdfUrl.trim();
+        if (url.startsWith("data:") || url.startsWith("blob:")) {
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = prop.pdfName || `وثيقة_${prop.number.replace(/[\/\\]/g, "-")}.pdf`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          return;
+        }
+
+        try {
+          const testRes = await fetch(url, { method: "HEAD", signal: AbortSignal.timeout(2500) });
+          if (testRes.ok) {
+            window.open(url, "_blank");
+            return;
+          }
+        } catch {}
+      }
+
+      // Safe fallback to client-side official generator
+      const { dataUrl, fileName } = await generateLegislativeProposalPdf(prop);
+      const link = document.createElement("a");
+      link.href = dataUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error("Error downloading proposal PDF:", err);
+      alert("تعذر استخراج ملف PDF، يرجى المحاولة لاحقاً.");
+    } finally {
+      setProposalGeneratingPdfId(null);
+    }
+  };
+
+  const handleOpenCivicArpLink = (prop: LegislativeProposal) => {
+    const url = prop.arpUrl?.trim();
+    if (url && url.match(/https?:\/\/(?:www\.)?arp\.tn\/loi\/project\/\d{3,5}$/)) {
+      window.open(url, "_blank", "noopener,noreferrer");
+      return;
+    }
+    if (prop.type === "مسائلة كتابية" || (url && url.includes("/questions"))) {
+      window.open("https://arp.tn/questions", "_blank", "noopener,noreferrer");
+      return;
+    }
+    window.open("https://arp.tn/loi/project/lp", "_blank", "noopener,noreferrer");
+  };
+
+  const handleCopyCivicProposal = (prop: LegislativeProposal) => {
+    const text = `🏛️ الجمهورية التونسية - مجلس نواب الشعب\n` +
+      `المكتب البرلماني للنائب أسماء درويش (دائرة منوبة - الدندان)\n\n` +
+      `📌 ${prop.type}: ${prop.number}\n` +
+      `📜 الموضوع: ${prop.title}\n` +
+      `🏢 الجهة / اللجنة: ${prop.committee}\n` +
+      `📅 تاريخ الإيداع: ${prop.depositDate}\n` +
+      `⚡ الوضعية: ${prop.status}\n` +
+      (prop.mpRole ? `⭐ صفة النائب: ${prop.mpRole}\n` : "") +
+      `\n📄 ملخص وشرح الأسباب:\n${prop.summary}\n\n` +
+      (prop.arpUrl ? `🔗 البوابة الرسمية بمجلس نواب الشعب: ${prop.arpUrl}\n` : "") +
+      `— المنصة التفاعلية للنائب أسماء درويش`;
+
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      setProposalCopiedId(prop.id);
+      setTimeout(() => setProposalCopiedId(null), 2500);
+    }
+  };
+
+  const filteredCivicProposals = proposals.filter((item) => {
+    if (proposalOnlyMp && item.isMpInitiative !== true) return false;
+    if (proposalType !== "الكل" && item.type !== proposalType) return false;
+    if (proposalYear !== "الكل" && String(item.year) !== proposalYear) return false;
+    if (proposalSearch.trim()) {
+      const q = proposalSearch.trim().toLowerCase();
+      const matchTitle = (item.title || "").toLowerCase().includes(q);
+      const matchNumber = (item.number || "").toLowerCase().includes(q);
+      const matchCommittee = (item.committee || "").toLowerCase().includes(q);
+      const matchSummary = (item.summary || "").toLowerCase().includes(q);
+      const matchRole = (item.mpRole || "").toLowerCase().includes(q);
+      return matchTitle || matchNumber || matchCommittee || matchSummary || matchRole;
+    }
+    return true;
+  });
+
   const LOCAL_DIRECTORY = [
     {
       name: "معتمدية منوبة",
@@ -589,8 +717,8 @@ export default function CivicModules({ refreshTrigger = 0 }: CivicModulesProps) 
 
   return (
     <div className="container mx-auto max-w-6xl px-4 sm:px-6 my-10">
-      {/* 5 Interactive Civic Module Selector Cards: Single Row on Desktop (lg:grid-cols-5), Compact Grid on Mobile */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3.5">
+      {/* 6 Interactive Civic Module Selector Cards: Single Row on Desktop (lg:grid-cols-6), Compact Grid on Mobile */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3.5">
         {/* Module 1: Live Analytics */}
         <button
           type="button"
@@ -649,6 +777,37 @@ export default function CivicModules({ refreshTrigger = 0 }: CivicModulesProps) 
             </h3>
             <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug line-clamp-2">
               متابعة تقدم المشاريع العمومية والمساءلة
+            </p>
+          </div>
+        </button>
+
+        {/* Module 3: Legislative Proposals & Initiatives */}
+        <button
+          type="button"
+          onClick={() => handleSelectTab("proposals")}
+          className={`group text-right rounded-2xl p-3 sm:p-3.5 transition-all border cursor-pointer relative overflow-hidden flex flex-col justify-between h-full ${
+            activeTab === "proposals"
+              ? "bg-white dark:bg-zinc-900 border-red-500 shadow-lg ring-2 ring-red-500/20"
+              : "bg-white/80 dark:bg-zinc-900/80 border-zinc-200 dark:border-zinc-800 hover:border-red-300 hover:shadow-md"
+          }`}
+        >
+          {activeTab === "proposals" && (
+            <span className="absolute top-0 right-0 left-0 h-1 bg-red-600" />
+          )}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="inline-flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-400 group-hover:scale-105 transition-transform">
+                <Landmark className="h-4 w-4 sm:h-4.5 sm:w-4.5" />
+              </div>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-red-50 text-red-700 dark:bg-red-950/60 dark:text-red-300">
+                13 مبادرة
+              </span>
+            </div>
+            <h3 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate mb-1">
+              المبادرات التشريعية
+            </h3>
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug line-clamp-2">
+              مقترحات القوانين والمسائلات بمجلس نواب الشعب
             </p>
           </div>
         </button>
@@ -1070,7 +1229,304 @@ export default function CivicModules({ refreshTrigger = 0 }: CivicModulesProps) 
         )}
 
         {/* ============================================================== */}
-        {/* MODULE 3: Citizen Guide & Appointments */}
+        {/* MODULE 3: Legislative Proposals & Parliamentary Initiatives */}
+        {/* ============================================================== */}
+        {activeTab === "proposals" && (
+          <div className="space-y-6">
+            {/* Header with Title and "Open in Modal" trigger */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-zinc-100 pb-5 dark:border-zinc-800">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-red-600 to-red-700 text-white shadow-md shadow-red-600/20 ring-4 ring-red-100 dark:ring-red-950/50">
+                  <Landmark className="h-6 w-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-[10px] font-bold text-red-800 dark:bg-red-950/60 dark:text-red-300">
+                      مجلس نواب الشعب 🏛️
+                    </span>
+                    <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                      الدور النيابي 2023 - 2028
+                    </span>
+                  </div>
+                  <h3 className="text-lg sm:text-xl font-black text-zinc-900 dark:text-zinc-100 tracking-tight">
+                    المبادرات التشريعية ومقترحات القوانين للنائب أسماء درويش
+                  </h3>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                    متابعة مقترحات القوانين، اللجان المتعهدة، والمسائلات الكتابية المودعة رسمياً باسم النائب عن دائرة منوبة - الدندان
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (onOpenProposalsModal) {
+                      onOpenProposalsModal();
+                    } else if (typeof window !== "undefined") {
+                      window.dispatchEvent(new CustomEvent("open-proposals-modal"));
+                    }
+                  }}
+                  className="rounded-xl border border-red-300 bg-red-50/70 px-4 py-2 text-xs font-bold text-red-700 hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300 transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span>معاينة في نافذة كاملة ⤢</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Metrics Bar */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="rounded-2xl border border-zinc-200/80 bg-zinc-50/70 p-3.5 dark:border-zinc-800 dark:bg-zinc-800/40">
+                <span className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400 block mb-1">
+                  إجمالي المبادرات بالمجلس
+                </span>
+                <span className="text-xl sm:text-2xl font-black text-zinc-900 dark:text-zinc-100 font-mono">
+                  {proposals.length}
+                </span>
+              </div>
+              <div className="rounded-2xl border border-zinc-200/80 bg-zinc-50/70 p-3.5 dark:border-zinc-800 dark:bg-zinc-800/40">
+                <span className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400 block mb-1">
+                  مقترحات قوانين
+                </span>
+                <span className="text-xl sm:text-2xl font-black text-red-600 dark:text-red-400 font-mono">
+                  {proposals.filter((p) => p.type === "مقترح قانون").length}
+                </span>
+              </div>
+              <div className="rounded-2xl border border-zinc-200/80 bg-zinc-50/70 p-3.5 dark:border-zinc-800 dark:bg-zinc-800/40">
+                <span className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400 block mb-1">
+                  مسائلات كتابية للحكومة
+                </span>
+                <span className="text-xl sm:text-2xl font-black text-blue-600 dark:text-blue-400 font-mono">
+                  {proposals.filter((p) => p.type === "مسائلة كتابية").length}
+                </span>
+              </div>
+              <div className="rounded-2xl border border-zinc-200/80 bg-zinc-50/70 p-3.5 dark:border-zinc-800 dark:bg-zinc-800/40">
+                <span className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400 block mb-1">
+                  سنة 2026
+                </span>
+                <span className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                  {proposals.filter((p) => p.year === 2026).length}
+                </span>
+              </div>
+            </div>
+
+            {/* Search and Filters Strip */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-zinc-50/70 p-3.5 rounded-2xl border border-zinc-200/80 dark:bg-zinc-800/40 dark:border-zinc-800">
+              <div className="relative flex-1">
+                <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+                <input
+                  type="text"
+                  value={proposalSearch}
+                  onChange={(e) => setProposalSearch(e.target.value)}
+                  placeholder="ابحث بالرقم (2026/037)، الموضوع (الحرايرية، بني مهيرة، سيدي منصور، الدرون...)، أو اللجنة..."
+                  className="w-full rounded-xl border border-zinc-200 bg-white py-2 pr-10 pl-4 text-xs text-zinc-900 placeholder:text-zinc-400 focus:border-red-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                />
+                {proposalSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setProposalSearch("")}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* MP Asma Derouiche specific initiatives filter toggle */}
+              <button
+                type="button"
+                onClick={() => setProposalOnlyMp((prev) => !prev)}
+                className={`rounded-full px-3.5 py-1.5 text-xs font-black transition flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer shadow-xs ${
+                  proposalOnlyMp
+                    ? "bg-red-600 text-white ring-2 ring-red-400 dark:ring-red-700"
+                    : "border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
+                }`}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                <span>مبادرات النائب فقط</span>
+              </button>
+
+              {/* Type pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                {(["الكل", "مقترح قانون", "مسائلة كتابية"] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setProposalType(t)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+                      proposalType === t
+                        ? "bg-red-600 text-white shadow-xs"
+                        : "border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+
+              {/* Year pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                {(["الكل", "2026", "2025", "2024", "2023"] as const).map((y) => (
+                  <button
+                    key={y}
+                    type="button"
+                    onClick={() => setProposalYear(y)}
+                    className={`rounded-full px-2.5 py-1.5 text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+                      proposalYear === y
+                        ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                        : "border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                    }`}
+                  >
+                    {y}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Proposals Cards Grid */}
+            {filteredCivicProposals.length === 0 ? (
+              <div className="p-12 text-center text-zinc-500 rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+                <FileText className="h-8 w-8 mx-auto text-zinc-400 mb-2" />
+                <p className="text-xs font-bold">لا توجد مبادرات مطابقة لمعايير البحث الحالية.</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProposalSearch("");
+                    setProposalType("الكل");
+                    setProposalYear("الكل");
+                    setProposalOnlyMp(false);
+                  }}
+                  className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-red-600 hover:underline"
+                >
+                  إعادة ضبط البحث
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4">
+                {filteredCivicProposals.map((prop) => (
+                  <div
+                    key={prop.id}
+                    className={`group rounded-2xl border p-4 sm:p-5 shadow-xs hover:shadow-md transition-all ${
+                      prop.isMpInitiative
+                        ? "border-red-200/90 bg-gradient-to-r from-red-50/20 via-white to-amber-50/10 dark:border-red-900/60 dark:from-red-950/20 dark:via-zinc-900 dark:to-zinc-900"
+                        : "border-zinc-200/90 bg-white dark:border-zinc-800 dark:bg-zinc-900"
+                    }`}
+                  >
+                    <div className="flex flex-col justify-between h-full">
+                      <div>
+                        {/* Top row */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            {/* Distinct MP Asma Derouiche Badge */}
+                            {prop.isMpInitiative && (
+                              <span className="inline-flex items-center gap-1.5 rounded-full bg-red-600 px-3 py-0.5 text-[11px] font-black text-white shadow-xs">
+                                <Sparkles className="h-3 w-3 text-amber-300 shrink-0" />
+                                <span>مبادرة النائب أسماء درويش {prop.mpRole ? `• ${prop.mpRole}` : ""}</span>
+                              </span>
+                            )}
+
+                            <span className="font-mono text-xs font-black text-red-800 bg-red-50 dark:bg-red-950/60 dark:text-red-300 px-2.5 py-1 rounded-lg border border-red-200 dark:border-red-900/40">
+                              {prop.type} عدد {prop.number}
+                            </span>
+                            <span className="rounded-md bg-zinc-100 px-2 py-0.5 text-[11px] font-bold text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+                              سنة {prop.year}
+                            </span>
+                          </div>
+
+                          <span className="rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-0.5 text-xs font-bold dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300">
+                            {prop.status}
+                          </span>
+                        </div>
+
+                        {/* Title */}
+                        <h4 className="text-base sm:text-lg font-black text-zinc-900 dark:text-zinc-50 leading-snug">
+                          {prop.title}
+                        </h4>
+
+                        {/* Metadata row */}
+                        <div className="mt-3 flex flex-wrap items-center gap-y-1.5 gap-x-4 text-xs text-zinc-600 dark:text-zinc-400">
+                          <div className="flex items-center gap-1.5">
+                            <Calendar className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                            <span>تاريخ الإيداع:</span>
+                            <strong className="text-zinc-800 dark:text-zinc-200">{prop.depositDate}</strong>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <Building2 className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                            <span>{prop.type === "مسائلة كتابية" ? "الجهة الحكومية:" : "اللجنة القارة:"}</span>
+                            <strong className="text-zinc-800 dark:text-zinc-200">{prop.committee}</strong>
+                          </div>
+                        </div>
+
+                        {/* Summary */}
+                        <div className="mt-3 rounded-xl border border-zinc-100 bg-zinc-50/70 p-3 sm:p-3.5 text-xs sm:text-sm text-zinc-700 dark:border-zinc-800/80 dark:bg-zinc-800/40 dark:text-zinc-300 leading-relaxed">
+                          <p>{prop.summary}</p>
+                        </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-2.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenCivicArpLink(prop)}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50/70 px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300 transition cursor-pointer shadow-xs"
+                            title="معاينة الملف بموقع مجلس نواب الشعب (ARP)"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            <span>معاينة بموقع المجلس (ARP)</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDownloadCivicProposalPdf(prop)}
+                            disabled={proposalGeneratingPdfId === prop.id}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 transition cursor-pointer shadow-xs disabled:opacity-50"
+                          >
+                            {proposalGeneratingPdfId === prop.id ? (
+                              <>
+                                <Loader2 className="h-3.5 w-3.5 animate-spin text-red-600" />
+                                <span>جارٍ إعداد الـ PDF...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Download className="h-3.5 w-3.5 text-emerald-600" />
+                                <span>تحميل نص المقترح (PDF)</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleCopyCivicProposal(prop)}
+                          className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 transition px-2 py-1 rounded-md cursor-pointer"
+                        >
+                          {proposalCopiedId === prop.id ? (
+                            <>
+                              <Check className="h-3.5 w-3.5 text-emerald-600" />
+                              <span className="text-emerald-600 font-bold">تم النسخ!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="h-3.5 w-3.5" />
+                              <span>نسخ المرجع</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ============================================================== */}
+        {/* MODULE 4: Citizen Guide & Appointments */}
         {/* ============================================================== */}
         {activeTab === "guide" && (
           <div className="space-y-6 animate-fadeIn">

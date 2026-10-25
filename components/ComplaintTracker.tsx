@@ -85,8 +85,14 @@ export default function ComplaintTracker({ initialSearchQuery = "" }: ComplaintT
       }
     };
 
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === "mp_last_update") {
+        handleUpdate();
+      }
+    };
+
     window.addEventListener("mp_data_updated", handleUpdate);
-    window.addEventListener("storage", handleUpdate);
+    window.addEventListener("storage", handleStorage);
 
     let bc: BroadcastChannel | null = null;
     try {
@@ -98,7 +104,7 @@ export default function ComplaintTracker({ initialSearchQuery = "" }: ComplaintT
 
     return () => {
       window.removeEventListener("mp_data_updated", handleUpdate);
-      window.removeEventListener("storage", handleUpdate);
+      window.removeEventListener("storage", handleStorage);
       bc?.close();
     };
   }, [selectedComplaint?.id, query]);

@@ -8,7 +8,9 @@ import {
   Search, 
   CheckCircle2, 
   Sparkles, 
-  ShieldCheck 
+  ShieldCheck,
+  Landmark,
+  FileText
 } from "lucide-react";
 import ComplaintModal, { ModalMode } from "@/components/ComplaintModal";
 import ComplaintTracker from "@/components/ComplaintTracker";
@@ -17,11 +19,13 @@ import CivicModules from "@/components/CivicModules";
 import LiveTownHall from "@/components/LiveTownHall";
 import ThemeToggle from "@/components/ThemeToggle";
 import AIChatWidget from "@/components/AIChatWidget";
+import LegislativeProposalsModal from "@/components/LegislativeProposalsModal";
 
 export default function Home() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<ModalMode>("petition");
   const [trackedId, setTrackedId] = useState<string>("");
+  const [isProposalsOpen, setIsProposalsOpen] = useState(false);
 
   useEffect(() => {
     const handleOpenPetition = () => {
@@ -32,9 +36,13 @@ export default function Home() {
       setModalMode("voice");
       setModalOpen(true);
     };
+    const handleOpenProposals = () => {
+      setIsProposalsOpen(true);
+    };
 
     window.addEventListener("open-petition-modal", handleOpenPetition);
     window.addEventListener("open-voice-modal", handleOpenVoice);
+    window.addEventListener("open-proposals-modal", handleOpenProposals);
 
     // Check URL parameters or hash for tracking ticket ID
     try {
@@ -67,6 +75,7 @@ export default function Home() {
     return () => {
       window.removeEventListener("open-petition-modal", handleOpenPetition);
       window.removeEventListener("open-voice-modal", handleOpenVoice);
+      window.removeEventListener("open-proposals-modal", handleOpenProposals);
     };
   }, []);
 
@@ -78,6 +87,14 @@ export default function Home() {
   const openVoiceModal = () => {
     setModalMode("voice");
     setModalOpen(true);
+  };
+
+  const openProposalsModal = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    setIsProposalsOpen(true);
   };
 
   const scrollToTracking = () => {
@@ -126,6 +143,18 @@ export default function Home() {
 
           {/* Action Buttons: Clean Icon-only on mobile, full text on desktop */}
           <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+            {/* Legislative Proposals Quick Button */}
+            <button
+              type="button"
+              onClick={openProposalsModal}
+              title="المبادرات التشريعية ومقترحات القوانين"
+              aria-label="المبادرات التشريعية ومقترحات القوانين"
+              className="inline-flex h-9 w-9 sm:h-auto sm:w-auto items-center justify-center gap-1.5 rounded-full border border-red-200 bg-red-50/80 p-0 sm:px-3 sm:py-1.5 text-xs font-bold text-red-700 hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300 transition cursor-pointer shadow-xs"
+            >
+              <Landmark className="h-4 w-4 text-red-600 shrink-0" />
+              <span className="hidden md:inline whitespace-nowrap">المبادرات التشريعية</span>
+            </button>
+
             <button
               type="button"
               onClick={scrollToTracking}
@@ -221,7 +250,7 @@ export default function Home() {
         </section>
 
         {/* 4 Interactive Civic Modules (Analytics, Projects, Appointments/Guide, Polls) */}
-        <CivicModules />
+        <CivicModules onOpenProposalsModal={() => setIsProposalsOpen(true)} />
 
         {/* Live Video Town Hall & Interactive Citizen Q&A */}
         <LiveTownHall />
@@ -265,6 +294,12 @@ export default function Home() {
         onClose={() => setModalOpen(false)}
         mode={modalMode}
         onTrackComplaint={handleTrackNewComplaint}
+      />
+
+      {/* Legislative Proposals & Parliamentary Initiatives Modal */}
+      <LegislativeProposalsModal
+        isOpen={isProposalsOpen}
+        onClose={() => setIsProposalsOpen(false)}
       />
 
       {/* Floating AI Chatbot Assistant for Citizens */}

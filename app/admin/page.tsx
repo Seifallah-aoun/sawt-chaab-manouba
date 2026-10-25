@@ -55,9 +55,14 @@ import {
   Mail,
   EyeOff,
   Download,
-  Paperclip
+  Paperclip,
+  Landmark,
+  Upload,
+  Database,
+  FileSpreadsheet
 } from "lucide-react";
 import { generateOfficialResponsePdf } from "@/lib/generate-response-pdf";
+import { generateLegislativeProposalPdf } from "@/lib/generate-proposal-pdf";
 import { acquireLiveMediaStream, LiveStreamBroadcaster } from "@/lib/native-stream";
 import { setGlobalMediaStream, getGlobalMediaStream } from "@/lib/stream-sync";
 import { 
@@ -78,8 +83,12 @@ import {
   YouthProgramCategory,
   YOUTH_PROGRAM_CATEGORIES,
   YouthRequest,
-  YouthRequestStatus
+  YouthRequestStatus,
+  LegislativeProposal,
+  ProposalType,
+  ProposalStatus
 } from "@/lib/types";
+import { INITIAL_PROPOSALS } from "@/lib/proposals-data";
 import { notifyDataChanged } from "@/lib/sync";
 import ThemeToggle from "@/components/ThemeToggle";
 
@@ -118,7 +127,45 @@ export default function AdminDashboard() {
   const [currentAdminUser, setCurrentAdminUser] = useState<string>("Asmaderouiche@Manouba.tn");
 
   // Tabs: "requests" | "projects" | "polls" | "appointments_alerts" | "live_qa" | "guides" | "youth"
-  const [activeTab, setActiveTab] = useState<"requests" | "projects" | "polls" | "appointments_alerts" | "live_qa" | "guides" | "youth">("requests");
+  const [activeTab, setActiveTab] = useState<"requests" | "projects" | "polls" | "appointments_alerts" | "live_qa" | "guides" | "youth" | "proposals">("requests");
+
+  // Proposals State
+  const [proposals, setProposals] = useState<LegislativeProposal[]>(INITIAL_PROPOSALS);
+  const [loadingProposals, setLoadingProposals] = useState(false);
+  const [proposalFilterType, setProposalFilterType] = useState<string>("الكل");
+  const [proposalFilterYear, setProposalFilterYear] = useState<string>("الكل");
+  const [proposalFilterStatus, setProposalFilterStatus] = useState<string>("الكل");
+  const [proposalSearchQuery, setProposalSearchQuery] = useState<string>("");
+  const [deletingProposalId, setDeletingProposalId] = useState<string | null>(null);
+
+  // Proposal Add/Edit Modal & Form State
+  const [isProposalModalOpen, setIsProposalModalOpen] = useState(false);
+  const [editingProposal, setEditingProposal] = useState<LegislativeProposal | null>(null);
+  const [propFormNumber, setPropFormNumber] = useState("");
+  const [propFormTitle, setPropFormTitle] = useState("");
+  const [propFormType, setPropFormType] = useState<ProposalType>("مقترح قانون");
+  const [propFormCommittee, setPropFormCommittee] = useState("");
+  const [propFormDepositDate, setPropFormDepositDate] = useState("");
+  const [propFormYear, setPropFormYear] = useState<number>(2026);
+  const [propFormStatus, setPropFormStatus] = useState<ProposalStatus>("قيد الدرس باللجنة");
+  const [propFormSummary, setPropFormSummary] = useState("");
+  const [propFormArpUrl, setPropFormArpUrl] = useState("");
+  const [propFormTargetAuthority, setPropFormTargetAuthority] = useState("");
+  const [propFormSignatories, setPropFormSignatories] = useState("النائب أسماء درويش ومجموعة من النواب");
+  const [propFormPdfUrl, setPropFormPdfUrl] = useState<string>("");
+  const [propFormPdfName, setPropFormPdfName] = useState<string>("");
+  const [propFormIsMpInitiative, setPropFormIsMpInitiative] = useState<boolean>(true);
+  const [propFormMpRole, setPropFormMpRole] = useState<string>("صاحبة المبادرة الرئيسية ومتبنية للمقترح");
+  const [isSavingProposal, setIsSavingProposal] = useState(false);
+  const [proposalFormFeedback, setProposalFormFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [generatingProposalPdfId, setGeneratingProposalPdfId] = useState<string | null>(null);
+
+  // Bulk Importer & Presets State
+  const [isBulkImportModalOpen, setIsBulkImportModalOpen] = useState(false);
+  const [bulkImportText, setBulkImportText] = useState("");
+  const [bulkImportMode, setBulkImportMode] = useState<"append" | "replace">("append");
+  const [bulkImportLoading, setBulkImportLoading] = useState(false);
+  const [bulkImportFeedback, setBulkImportFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Live Town Hall & Q&A Chat State
   const [liveStreamConfig, setLiveStreamConfig] = useState<LiveStreamConfig | null>(null);
@@ -484,6 +531,335 @@ export default function AdminDashboard() {
       })
       .catch((err) => console.error("Error fetching youth data:", err))
       .finally(() => setLoadingYouth(false));
+
+    setLoadingProposals(true);
+    fetch(`/api/proposals?t=${Date.now()}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => {
+        if (Array.isArray(d.proposals)) setProposals(d.proposals);
+      })
+      .catch((err) => console.error("Error fetching proposals:", err))
+      .finally(() => setLoadingProposals(false));
+  };
+
+  // Legislative Proposals Handlers
+  const fetchProposalsData = useCallback(async () => {
+    try {
+      setLoadingProposals(true);
+      const res = await fetch(`/api/proposals?t=${Date.now()}`, { cache: "no-store" });
+      const data = await res.json();
+      if (Array.isArray(data.proposals)) {
+        setProposals(data.proposals);
+      }
+    } catch (err) {
+      console.error("Error fetching proposals:", err);
+    } finally {
+      setLoadingProposals(false);
+    }
+  }, []);
+
+  const openCreateProposalModal = () => {
+    setEditingProposal(null);
+    setPropFormNumber(`2026/${String(proposals.length + 1).padStart(3, "0")}`);
+    setPropFormTitle("");
+    setPropFormType("مقترح قانون");
+    setPropFormCommittee("لجنة تنظيم الإدارة وتطويرها والرقمنة والحوكمة ومكافحة الفساد");
+    setPropFormDepositDate(new Date().toLocaleDateString("ar-TN", { year: "numeric", month: "long", day: "numeric" }));
+    setPropFormYear(2026);
+    setPropFormStatus("قيد الدرس باللجنة");
+    setPropFormSummary("");
+    setPropFormArpUrl("");
+    setPropFormTargetAuthority("");
+    setPropFormSignatories("النائب أسماء درويش ومجموعة من النواب");
+    setPropFormPdfUrl("");
+    setPropFormPdfName("");
+    setPropFormIsMpInitiative(true);
+    setPropFormMpRole("صاحبة المبادرة الرئيسية ومتبنية للمقترح");
+    setProposalFormFeedback(null);
+    setIsProposalModalOpen(true);
+  };
+
+  const openEditProposalModal = (item: LegislativeProposal) => {
+    setEditingProposal(item);
+    setPropFormNumber(item.number);
+    setPropFormTitle(item.title);
+    setPropFormType(item.type);
+    setPropFormCommittee(item.committee);
+    setPropFormDepositDate(item.depositDate);
+    setPropFormYear(item.year);
+    setPropFormStatus(item.status);
+    setPropFormSummary(item.summary);
+    setPropFormArpUrl(item.arpUrl || "");
+    setPropFormTargetAuthority(item.targetAuthority || "");
+    setPropFormSignatories(item.signatories || "النائب أسماء درويش ومجموعة من النواب");
+    setPropFormPdfUrl(item.pdfUrl || "");
+    setPropFormPdfName(item.pdfName || "");
+    setPropFormIsMpInitiative(item.isMpInitiative !== false);
+    setPropFormMpRole(item.mpRole || "");
+    setProposalFormFeedback(null);
+    setIsProposalModalOpen(true);
+  };
+
+  const handleProposalFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      alert("الرجاء اختيار ملف بصيغة PDF فقط.");
+      return;
+    }
+    if (file.size > 12 * 1024 * 1024) {
+      alert("حجم الملف يجب ألا يتجاوز 12 ميغابايت.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      setPropFormPdfUrl(dataUrl);
+      setPropFormPdfName(file.name);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveProposal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setProposalFormFeedback(null);
+
+    const title = propFormTitle.trim();
+    const number = propFormNumber.trim();
+    const committee = propFormCommittee.trim();
+
+    if (!title || !number || !committee) {
+      setProposalFormFeedback({
+        type: "error",
+        text: "يرجى تعمير الحقول الأساسية: رقم المقترح، العنوان، واللجنة المعنية.",
+      });
+      return;
+    }
+
+    try {
+      setIsSavingProposal(true);
+      const isEdit = Boolean(editingProposal?.id);
+      const url = "/api/proposals";
+      const method = isEdit ? "PATCH" : "POST";
+
+      const payload = {
+        id: editingProposal?.id,
+        number,
+        title,
+        type: propFormType,
+        committee,
+        depositDate: propFormDepositDate.trim() || new Date().toLocaleDateString("ar-TN"),
+        year: Number(propFormYear) || 2026,
+        status: propFormStatus,
+        summary: propFormSummary.trim(),
+        arpUrl: propFormArpUrl.trim() || undefined,
+        targetAuthority: propFormTargetAuthority.trim() || undefined,
+        signatories: propFormSignatories.trim() || undefined,
+        pdfUrl: propFormPdfUrl || undefined,
+        pdfName: propFormPdfName || undefined,
+        isMpInitiative: propFormIsMpInitiative,
+        mpRole: propFormMpRole.trim() || undefined,
+      };
+
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "تعذر حفظ المبادرة التشريعية.");
+      }
+
+      await fetchProposalsData();
+      notifyDataChanged("PROPOSALS_UPDATED");
+      setIsProposalModalOpen(false);
+    } catch (err: unknown) {
+      setProposalFormFeedback({
+        type: "error",
+        text: err instanceof Error ? err.message : "حدث خطأ غير متوقع أثناء الحفظ.",
+      });
+    } finally {
+      setIsSavingProposal(false);
+    }
+  };
+
+  const handleDeleteProposal = async (id: string, title: string) => {
+    if (!window.confirm(`هل أنت متأكد من رغبتك في حذف المبادرة التشريعية:\n"${title}"؟`)) {
+      return;
+    }
+    setDeletingProposalId(id);
+    try {
+      const res = await fetch(`/api/proposals?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "تعذر حذف المبادرة.");
+      }
+      setProposals((prev) => prev.filter((p) => p.id !== id));
+      notifyDataChanged("PROPOSALS_UPDATED");
+    } catch (err) {
+      console.error("Error deleting proposal:", err);
+      alert("حدث خطأ أثناء حذف المبادرة التشريعية.");
+    } finally {
+      setDeletingProposalId(null);
+    }
+  };
+
+  const handleDownloadAdminProposalPdf = async (prop: LegislativeProposal) => {
+    try {
+      setGeneratingProposalPdfId(prop.id);
+      if (prop.pdfUrl && prop.pdfUrl.trim()) {
+        const url = prop.pdfUrl.trim();
+        if (url.startsWith("data:") || url.startsWith("blob:")) {
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = prop.pdfName || `وثيقة_${prop.number.replace(/[\/\\]/g, "-")}.pdf`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          return;
+        }
+
+        try {
+          const testRes = await fetch(url, { method: "HEAD", signal: AbortSignal.timeout(2500) });
+          if (testRes.ok) {
+            window.open(url, "_blank");
+            return;
+          }
+        } catch {}
+      }
+
+      // Fallback to client-side official generator
+      const { dataUrl, fileName } = await generateLegislativeProposalPdf(prop);
+      const link = document.createElement("a");
+      link.href = dataUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error("Error generating admin proposal PDF:", err);
+      alert("تعذر استخراج ملف PDF، يرجى المحاولة لاحقاً.");
+    } finally {
+      setGeneratingProposalPdfId(null);
+    }
+  };
+
+  // 1. Reset / Seed to official ARP comprehensive dataset (2023 - 2026)
+  const handleResetToOfficialArpDataset = async () => {
+    if (!window.confirm("هل أنت متأكد من استعادة حزمة المبادرات البرلمانية الرسمية كاملة (2023 - 2026) المنشورة بمجلس نواب الشعب؟")) {
+      return;
+    }
+    try {
+      setBulkImportLoading(true);
+      setBulkImportFeedback(null);
+      const res = await fetch("/api/proposals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reset_seed" }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (Array.isArray(data.proposals)) setProposals(data.proposals);
+        setBulkImportFeedback({ type: "success", text: data.message || "تمت استعادة حزمة المبادرات بنجاح!" });
+        notifyDataChanged("PROPOSALS_UPDATED");
+        await fetchProposalsData();
+      } else {
+        setBulkImportFeedback({ type: "error", text: data.error || "فشل استعادة البيانات." });
+      }
+    } catch (err: unknown) {
+      setBulkImportFeedback({ type: "error", text: err instanceof Error ? err.message : "حدث خطأ غير متوقع." });
+    } finally {
+      setBulkImportLoading(false);
+    }
+  };
+
+  // 2. Execute Bulk Import from JSON or CSV text
+  const handleExecuteBulkImport = async () => {
+    const raw = bulkImportText.trim();
+    if (!raw) {
+      setBulkImportFeedback({ type: "error", text: "يرجى لصق بيانات JSON أو CSV أو كتابة المبادرات أولاً." });
+      return;
+    }
+
+    try {
+      setBulkImportLoading(true);
+      setBulkImportFeedback(null);
+
+      let items: Partial<LegislativeProposal>[] = [];
+
+      if (raw.startsWith("[") || raw.startsWith("{")) {
+        const parsed = JSON.parse(raw);
+        items = Array.isArray(parsed) ? parsed : [parsed];
+      } else {
+        const lines = raw.split(/\r?\n/).filter((l) => l.trim().length > 0);
+        if (lines.length === 0) {
+          throw new Error("ملف CSV فارغ.");
+        }
+        const firstLineCols = lines[0].split(",").map((c) => c.trim().replace(/^["']|["']$/g, ""));
+        const hasHeader = firstLineCols.some((c) => ["number", "title", "الرقم", "الموضوع", "العنوان"].includes(c.toLowerCase()));
+        const dataLines = hasHeader ? lines.slice(1) : lines;
+
+        items = dataLines.map((line, idx) => {
+          const cols = line.split(",").map((c) => c.trim().replace(/^["']|["']$/g, ""));
+          return {
+            id: `PROP-IMP-${Date.now()}-${idx}`,
+            number: cols[0] || `2026/IMP-${idx + 1}`,
+            title: cols[1] || `مبادرة تشريعية مستوردة ${idx + 1}`,
+            type: (cols[2] as ProposalType) || "مقترح قانون",
+            depositDate: cols[3] || new Date().toLocaleDateString("ar-TN"),
+            year: Number(cols[4]) || 2026,
+            committee: cols[5] || "لجنة تنظيم الإدارة وتطويرها والرقمنة والحوكمة ومكافحة الفساد",
+            status: (cols[6] as ProposalStatus) || "قيد الدرس باللجنة",
+            arpUrl: cols[7] || undefined,
+            summary: cols[8] || cols[1] || "",
+            targetAuthority: cols[9] || undefined,
+            signatories: cols[10] || "النائب أسماء درويش ومجموعة من النواب",
+          };
+        });
+      }
+
+      if (items.length === 0) {
+        throw new Error("لم يتم استخراج أي عنصر صالح.");
+      }
+
+      const res = await fetch("/api/proposals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "bulk_import",
+          items,
+          mode: bulkImportMode,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setBulkImportFeedback({ type: "success", text: data.message || `تم بنجاح استيراد ${items.length} عنصر!` });
+        setBulkImportText("");
+        notifyDataChanged("PROPOSALS_UPDATED");
+        await fetchProposalsData();
+      } else {
+        setBulkImportFeedback({ type: "error", text: data.error || "فشل استيراد البيانات." });
+      }
+    } catch (err: unknown) {
+      setBulkImportFeedback({ type: "error", text: err instanceof Error ? err.message : "صيغة البيانات غير صحيحة. يرجى التحقق من تنسيق JSON أو CSV." });
+    } finally {
+      setBulkImportLoading(false);
+    }
+  };
+
+  // 3. Export current proposals to JSON file
+  const handleExportProposalsJson = () => {
+    const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(proposals, null, 2))}`;
+    const downloadAnchor = document.createElement("a");
+    downloadAnchor.setAttribute("href", jsonString);
+    downloadAnchor.setAttribute("download", `arp_proposals_${new Date().toISOString().split("T")[0]}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
   };
 
   useEffect(() => {
@@ -2474,6 +2850,19 @@ export default function AdminDashboard() {
           >
             <Rocket className="h-4 w-4" />
             <span>المبادرات الشبابية والتشغيل ({youthRequests.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("proposals")}
+            className={`py-3.5 border-b-2 transition cursor-pointer flex items-center gap-2 ${
+              activeTab === "proposals"
+                ? "border-red-600 text-red-600 font-bold"
+                : "border-transparent text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
+            }`}
+          >
+            <Landmark className="h-4 w-4" />
+            <span>المبادرات التشريعية ومقترحات القوانين ({proposals.length})</span>
           </button>
         </div>
       </div>
@@ -6197,7 +6586,916 @@ export default function AdminDashboard() {
           </div>
         )}
 
-      </main>
+        {/* ============================================================== */}
+        {/* TAB 9: Legislative Proposals & Initiatives Management */}
+        {/* ============================================================== */}
+        {activeTab === "proposals" && (
+          <div className="space-y-6">
+            {/* Top Stat Summary Banner */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+                <span className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400 block mb-1">
+                  إجمالي المبادرات بالمجلس
+                </span>
+                <div className="flex items-center justify-between">
+                  <span className="text-2xl font-black text-red-600 dark:text-red-400">
+                    {proposals.length}
+                  </span>
+                  <Landmark className="h-5 w-5 text-red-500/60" />
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+                <span className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400 block mb-1">
+                  مقترحات ومشاريع قوانين
+                </span>
+                <div className="flex items-center justify-between">
+                  <span className="text-2xl font-black text-blue-600 dark:text-blue-400">
+                    {proposals.filter((p) => p.type === "مقترح قانون" || p.type === "مبادرة تشريعية").length}
+                  </span>
+                  <FileText className="h-5 w-5 text-blue-500/60" />
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+                <span className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400 block mb-1">
+                  مسائلات كتابية
+                </span>
+                <div className="flex items-center justify-between">
+                  <span className="text-2xl font-black text-amber-600 dark:text-amber-400">
+                    {proposals.filter((p) => p.type === "مسائلة كتابية").length}
+                  </span>
+                  <Building2 className="h-5 w-5 text-amber-500/60" />
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+                <span className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400 block mb-1">
+                  سنة 2026
+                </span>
+                <div className="flex items-center justify-between">
+                  <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
+                    {proposals.filter((p) => p.year === 2026).length}
+                  </span>
+                  <Calendar className="h-5 w-5 text-emerald-500/60" />
+                </div>
+              </div>
+            </div>
+
+            {/* Action Bar */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400">
+                  <Landmark className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-zinc-900 dark:text-zinc-100">
+                    إدارة المبادرات التشريعية ومقترحات القوانين
+                  </h3>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    نشر وتحديث مقترحات القوانين، اللجان المتعهدة، والمسائلات الكتابية المودعة بمجلس نواب الشعب وإرفاق وثائق الـ PDF
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={fetchProposalsData}
+                  disabled={loadingProposals}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-2 text-xs font-bold text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 transition cursor-pointer"
+                  title="تحديث البيانات"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${loadingProposals ? "animate-spin" : ""}`} />
+                  <span className="hidden sm:inline">تحديث</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBulkImportFeedback(null);
+                    setIsBulkImportModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-red-300 bg-red-50/80 px-3.5 py-2 text-xs font-bold text-red-700 hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300 transition cursor-pointer shadow-xs"
+                  title="استيراد سريع أو استعادة حزمة ARP الرسمية كاملة"
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  <span>استيراد سريع / حزمة ARP</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleExportProposalsJson}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 transition cursor-pointer"
+                  title="تصدير قائمة المبادرات كملف JSON"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  <span className="hidden md:inline">تصدير (JSON)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={openCreateProposalModal}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-red-700 transition cursor-pointer"
+                >
+                  <PlusCircle className="h-4 w-4" />
+                  <span>إضافة مقترح قانون جديد</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Filter & Search Toolbar */}
+            <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                {/* Search query */}
+                <div className="sm:col-span-2 relative">
+                  <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+                  <input
+                    type="text"
+                    value={proposalSearchQuery}
+                    onChange={(e) => setProposalSearchQuery(e.target.value)}
+                    placeholder="ابحث بالرقم (مثال: 2026/037)، الموضوع (الحرايرية، الدرون...)، أو اللجنة..."
+                    className="w-full rounded-xl border border-zinc-200 bg-zinc-50/70 py-2 pr-10 pl-4 text-xs text-zinc-900 placeholder:text-zinc-400 focus:border-red-500 focus:bg-white focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                  />
+                  {proposalSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setProposalSearchQuery("")}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Filter by Type */}
+                <div>
+                  <select
+                    value={proposalFilterType}
+                    onChange={(e) => setProposalFilterType(e.target.value)}
+                    className="w-full rounded-xl border border-zinc-200 bg-zinc-50/70 px-3 py-2 text-xs font-bold text-zinc-700 focus:border-red-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 cursor-pointer"
+                  >
+                    <option value="الكل">كل الأنواع</option>
+                    <option value="مقترح قانون">مقترح قانون</option>
+                    <option value="مبادرة تشريعية">مبادرة تشريعية</option>
+                    <option value="مسائلة كتابية">مسائلة كتابية</option>
+                  </select>
+                </div>
+
+                {/* Filter by Year */}
+                <div>
+                  <select
+                    value={proposalFilterYear}
+                    onChange={(e) => setProposalFilterYear(e.target.value)}
+                    className="w-full rounded-xl border border-zinc-200 bg-zinc-50/70 px-3 py-2 text-xs font-bold text-zinc-700 focus:border-red-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 cursor-pointer"
+                  >
+                    <option value="الكل">كل السنوات</option>
+                    <option value="2026">2026</option>
+                    <option value="2025">2025</option>
+                    <option value="2024">2024</option>
+                    <option value="2023">2023</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Proposals List */}
+            {loadingProposals ? (
+              <div className="flex flex-col items-center justify-center py-20 text-zinc-500">
+                <RefreshCw className="h-7 w-7 animate-spin text-red-600 mb-2" />
+                <p className="text-xs font-bold">جارٍ تحميل المبادرات التشريعية...</p>
+              </div>
+            ) : proposals.filter((p) => {
+                if (proposalFilterType !== "الكل" && p.type !== proposalFilterType) return false;
+                if (proposalFilterYear !== "الكل" && String(p.year) !== proposalFilterYear) return false;
+                if (proposalSearchQuery.trim()) {
+                  const q = proposalSearchQuery.trim().toLowerCase();
+                  const matchTitle = (p.title || "").toLowerCase().includes(q);
+                  const matchNum = (p.number || "").toLowerCase().includes(q);
+                  const matchCom = (p.committee || "").toLowerCase().includes(q);
+                  const matchSum = (p.summary || "").toLowerCase().includes(q);
+                  return matchTitle || matchNum || matchCom || matchSum;
+                }
+                return true;
+              }).length === 0 ? (
+              <div className="rounded-2xl border border-zinc-200 bg-white p-12 text-center shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+                <Landmark className="mx-auto h-12 w-12 text-zinc-300 dark:text-zinc-600 mb-3" />
+                <h4 className="text-sm font-bold text-zinc-800 dark:text-zinc-200">
+                  لم يتم العثور على أي مبادرة تشريعية
+                </h4>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 mb-4">
+                  يمكنك إضافة مبادرة جديدة أو استعادة حزمة المبادرات الرسمية بنقرة واحدة.
+                </p>
+                <button
+                  type="button"
+                  onClick={openCreateProposalModal}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-red-700 transition"
+                >
+                  <PlusCircle className="h-4 w-4" />
+                  <span>إضافة مقترح قانون جديد</span>
+                </button>
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-right text-xs">
+                    <thead className="bg-zinc-50 text-[11px] font-bold text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-800">
+                      <tr>
+                        <th className="p-3.5">الرقم / النوع</th>
+                        <th className="p-3.5">الموضوع واللجنة المعنية</th>
+                        <th className="p-3.5">تاريخ الإيداع</th>
+                        <th className="p-3.5">الوضعية بالمجلس</th>
+                        <th className="p-3.5">وثيقة الـ PDF</th>
+                        <th className="p-3.5 text-center">الإجراءات</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800 font-medium">
+                      {proposals
+                        .filter((p) => {
+                          if (proposalFilterType !== "الكل" && p.type !== proposalFilterType) return false;
+                          if (proposalFilterYear !== "الكل" && String(p.year) !== proposalFilterYear) return false;
+                          if (proposalSearchQuery.trim()) {
+                            const q = proposalSearchQuery.trim().toLowerCase();
+                            const matchTitle = (p.title || "").toLowerCase().includes(q);
+                            const matchNum = (p.number || "").toLowerCase().includes(q);
+                            const matchCom = (p.committee || "").toLowerCase().includes(q);
+                            const matchSum = (p.summary || "").toLowerCase().includes(q);
+                            return matchTitle || matchNum || matchCom || matchSum;
+                          }
+                          return true;
+                        })
+                        .map((item) => (
+                          <tr key={item.id} className="hover:bg-zinc-50/60 dark:hover:bg-zinc-800/40 transition">
+                            <td className="p-3.5 whitespace-nowrap">
+                              <span className="font-mono font-black text-red-600 dark:text-red-400 block text-xs">
+                                {item.number}
+                              </span>
+                              <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                                <span className="inline-block rounded-md px-1.5 py-0.5 text-[10px] font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
+                                  {item.type}
+                                </span>
+                                {item.isMpInitiative && (
+                                  <span className="inline-flex items-center gap-0.5 rounded-full bg-red-100 px-1.5 py-0.2 text-[9px] font-black text-red-800 dark:bg-red-950 dark:text-red-300">
+                                    <Sparkles className="h-2.5 w-2.5 text-red-600" />
+                                    <span>النائب</span>
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-3.5 max-w-md">
+                              <h4 className="font-bold text-zinc-900 dark:text-zinc-100 leading-snug line-clamp-2">
+                                {item.title}
+                              </h4>
+                              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-1">
+                                {item.committee}
+                              </p>
+                            </td>
+                            <td className="p-3.5 whitespace-nowrap text-zinc-600 dark:text-zinc-400">
+                              <div className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3 text-zinc-400" />
+                                <span>{item.depositDate}</span>
+                              </div>
+                            </td>
+                            <td className="p-3.5 whitespace-nowrap">
+                              <span
+                                className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-bold border ${
+                                  item.status === "جاهز للجلسة العامة" || item.status === "تمت المصادقة"
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300"
+                                    : item.status === "مُجاب عنها"
+                                    ? "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/40 dark:text-teal-300"
+                                    : item.status === "في انتظار التقرير" || item.status === "في انتظار الرد"
+                                    ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300"
+                                    : "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300"
+                                }`}
+                              >
+                                {item.status}
+                              </span>
+                            </td>
+                            <td className="p-3.5 whitespace-nowrap">
+                              <div className="flex items-center gap-1.5">
+                                {item.pdfUrl ? (
+                                  <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 font-bold">
+                                    <Paperclip className="h-3 w-3" />
+                                    <span>مرفق خاص</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-[11px] text-blue-600">
+                                    <Sparkles className="h-3 w-3" />
+                                    <span>توليد تلقائي</span>
+                                  </span>
+                                )}
+                                {item.arpUrl && (
+                                  <a
+                                    href={item.arpUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="p-1 text-zinc-400 hover:text-red-600 transition"
+                                    title="معاينة بموقع المجلس"
+                                  >
+                                    <ExternalLink className="h-3.5 w-3.5" />
+                                  </a>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-3.5 whitespace-nowrap text-center">
+                              <div className="inline-flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleDownloadAdminProposalPdf(item)}
+                                  disabled={generatingProposalPdfId === item.id}
+                                  className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 transition"
+                                  title="تحميل وثيقة الـ PDF"
+                                >
+                                  {generatingProposalPdfId === item.id ? (
+                                    <RefreshCw className="h-4 w-4 animate-spin text-red-600" />
+                                  ) : (
+                                    <Download className="h-4 w-4" />
+                                  )}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openEditProposalModal(item)}
+                                  className="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/50 transition"
+                                  title="تعديل المبادرة"
+                                >
+                                  <Edit3 className="h-4 w-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteProposal(item.id, item.title)}
+                                  disabled={deletingProposalId === item.id}
+                                  className="rounded-lg p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 transition disabled:opacity-50"
+                                  title="حذف المبادرة"
+                                >
+                                  {deletingProposalId === item.id ? (
+                                    <RefreshCw className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="h-4 w-4" />
+                                  )}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Proposal Add/Edit Modal */}
+        {isProposalModalOpen && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm overflow-y-auto"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setIsProposalModalOpen(false);
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="relative flex flex-col w-full max-w-2xl max-h-[90vh] rounded-3xl border border-zinc-200 bg-white shadow-2xl overflow-hidden dark:border-zinc-800 dark:bg-zinc-900 my-auto"
+              dir="rtl"
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-5 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-950/40">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400">
+                    <Landmark className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-zinc-900 dark:text-zinc-100">
+                      {editingProposal ? "تعديل المبادرة التشريعية" : "إضافة مبادرة تشريعية / مقترح قانون جديد"}
+                    </h3>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                      إدراج البيانات الرسمية بمجلس نواب الشعب وإرفاق نص القانون
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsProposalModalOpen(false)}
+                  className="rounded-full p-2 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 transition cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Modal Form */}
+              <form onSubmit={handleSaveProposal} className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4 text-right">
+                {proposalFormFeedback && (
+                  <div
+                    className={`p-3 rounded-xl text-xs font-bold border flex items-center gap-2 ${
+                      proposalFormFeedback.type === "success"
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800"
+                        : "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/50 dark:text-red-300 dark:border-red-800"
+                    }`}
+                  >
+                    {proposalFormFeedback.type === "success" ? (
+                      <CheckCircle2 className="h-4 w-4 shrink-0" />
+                    ) : (
+                      <AlertCircle className="h-4 w-4 shrink-0" />
+                    )}
+                    <span>{proposalFormFeedback.text}</span>
+                  </div>
+                )}
+
+                {/* Number & Type */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                      رقم المبادرة / المقترح بالمجلس <span className="text-red-600">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={propFormNumber}
+                      onChange={(e) => setPropFormNumber(e.target.value)}
+                      placeholder="مثال: 2026/037 أو Q-2026/089"
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-xs text-zinc-900 focus:border-red-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                      نوع المبادرة البرلمانية <span className="text-red-600">*</span>
+                    </label>
+                    <select
+                      value={propFormType}
+                      onChange={(e) => setPropFormType(e.target.value as ProposalType)}
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-xs text-zinc-900 focus:border-red-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 cursor-pointer"
+                    >
+                      <option value="مقترح قانون">مقترح قانون</option>
+                      <option value="مبادرة تشريعية">مبادرة تشريعية</option>
+                      <option value="مسائلة كتابية">مسائلة كتابية</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Title */}
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    موضوع وعنوان المبادرة التشريعية <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={propFormTitle}
+                    onChange={(e) => setPropFormTitle(e.target.value)}
+                    placeholder="مثال: مقترح قانون يتعلق بإحداث بلدية الحرايرية..."
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-xs text-zinc-900 focus:border-red-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                  />
+                </div>
+
+                {/* Committee & Status */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                      اللجنة البرلمانية المتعهدة / الجهة <span className="text-red-600">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={propFormCommittee}
+                      onChange={(e) => setPropFormCommittee(e.target.value)}
+                      placeholder="مثال: لجنة تنظيم الإدارة وتطويرها والرقمنة..."
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-xs text-zinc-900 focus:border-red-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                      الوضعية الحالية بمجلس نواب الشعب <span className="text-red-600">*</span>
+                    </label>
+                    <select
+                      value={propFormStatus}
+                      onChange={(e) => setPropFormStatus(e.target.value as ProposalStatus)}
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-xs text-zinc-900 focus:border-red-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 cursor-pointer"
+                    >
+                      <option value="قيد الدرس باللجنة">قيد الدرس باللجنة</option>
+                      <option value="في انتظار التقرير">في انتظار التقرير</option>
+                      <option value="جاهز للجلسة العامة">جاهز للجلسة العامة</option>
+                      <option value="تمت المصادقة">تمت المصادقة</option>
+                      <option value="في انتظار الرد">في انتظار الرد</option>
+                      <option value="مُجاب عنها">مُجاب عنها</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Deposit Date & Year */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                      تاريخ الإيداع الرسمي
+                    </label>
+                    <input
+                      type="text"
+                      value={propFormDepositDate}
+                      onChange={(e) => setPropFormDepositDate(e.target.value)}
+                      placeholder="مثال: 12 جوان 2026"
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-xs text-zinc-900 focus:border-red-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                      السنة التشريعية
+                    </label>
+                    <input
+                      type="number"
+                      value={propFormYear}
+                      onChange={(e) => setPropFormYear(Number(e.target.value))}
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-xs text-zinc-900 focus:border-red-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* ARP URL */}
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    الرابط الرسمي على موقع مجلس نواب الشعب (ARP)
+                  </label>
+                  <input
+                    type="url"
+                    value={propFormArpUrl}
+                    onChange={(e) => setPropFormArpUrl(e.target.value)}
+                    placeholder="https://www.arp.tn/loi/project/..."
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-xs text-zinc-900 focus:border-red-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 font-mono"
+                  />
+                </div>
+
+                {/* MP Asma Derouiche Initiative Highlight Toggle & Role */}
+                <div className="rounded-2xl border border-red-200 bg-red-50/50 p-4 dark:border-red-900/40 dark:bg-red-950/20 space-y-3">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={propFormIsMpInitiative}
+                      onChange={(e) => setPropFormIsMpInitiative(e.target.checked)}
+                      className="h-4 w-4 rounded text-red-600 focus:ring-red-500 accent-red-600 cursor-pointer"
+                    />
+                    <span className="text-xs font-black text-red-900 dark:text-red-300">
+                      ⭐ مبادرة مباشرة أو مسائلة خاصة بالنائب أسماء درويش
+                    </span>
+                  </label>
+
+                  {propFormIsMpInitiative && (
+                    <div>
+                      <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                        صفة ودور النائب بالمبادرة:
+                      </label>
+                      <input
+                        type="text"
+                        value={propFormMpRole}
+                        onChange={(e) => setPropFormMpRole(e.target.value)}
+                        placeholder="مثال: صاحبة المبادرة الرئيسية وممثلة المقترح / صاحبة المسائلة المباشرة..."
+                        className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 focus:border-red-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Summary / Rationale */}
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    ملخص وشرح أسباب المبادرة التشريعية <span className="text-red-600">*</span>
+                  </label>
+                  <textarea
+                    rows={4}
+                    required
+                    value={propFormSummary}
+                    onChange={(e) => setPropFormSummary(e.target.value)}
+                    placeholder="شرح أهداف المقترح، الانعكاسات على المتساكنين، ودوافع تقديم هذه المبادرة البرلمانية..."
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-xs text-zinc-900 focus:border-red-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                  />
+                </div>
+
+                {/* PDF File Attachment or URL */}
+                <div className="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                      إرفاق وثيقة نص المقترح الرسمية بصيغة PDF (اختياري)
+                    </label>
+                    <Download className="h-4 w-4 text-zinc-400" />
+                  </div>
+
+                  {propFormPdfUrl ? (
+                    <div className="flex items-center justify-between rounded-xl bg-white p-3 border border-emerald-200 dark:bg-zinc-900 dark:border-emerald-900">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Paperclip className="h-4 w-4 text-emerald-600 shrink-0" />
+                        <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate">
+                          {propFormPdfName || (propFormPdfUrl.startsWith("data:") ? "وثيقة_المقترح_الرسمية.pdf" : propFormPdfUrl)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (propFormPdfUrl.startsWith("data:")) {
+                              const link = document.createElement("a");
+                              link.href = propFormPdfUrl;
+                              link.download = propFormPdfName || "وثيقة.pdf";
+                              link.click();
+                            } else {
+                              window.open(propFormPdfUrl, "_blank");
+                            }
+                          }}
+                          className="text-xs text-blue-600 hover:text-blue-700 font-bold px-2 py-1 cursor-pointer"
+                        >
+                          معاينة
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPropFormPdfUrl("");
+                            setPropFormPdfName("");
+                          }}
+                          className="text-xs text-red-600 hover:text-red-700 font-bold px-2 py-1 cursor-pointer"
+                        >
+                          إزالة
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 mb-1">
+                          تحميل ملف PDF من الجهاز:
+                        </label>
+                        <input
+                          type="file"
+                          accept=".pdf"
+                          onChange={handleProposalFileUpload}
+                          className="w-full text-xs text-zinc-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-red-600 file:text-white hover:file:bg-red-700 cursor-pointer"
+                        />
+                      </div>
+                      <div className="relative flex items-center justify-center my-1">
+                        <span className="absolute inset-x-0 h-px bg-zinc-200 dark:bg-zinc-700" />
+                        <span className="relative bg-zinc-50 px-2 text-[10px] text-zinc-400 dark:bg-zinc-800">
+                          أو إدخال رابط خارجي
+                        </span>
+                      </div>
+                      <div>
+                        <input
+                          type="url"
+                          value={propFormPdfUrl}
+                          onChange={(e) => {
+                            setPropFormPdfUrl(e.target.value);
+                            setPropFormPdfName(e.target.value.split("/").pop() || "وثيقة_خارجية.pdf");
+                          }}
+                          placeholder="رابط مباشر لملف PDF (مثال: https://.../document.pdf)"
+                          className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 focus:border-red-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 font-mono"
+                        />
+                      </div>
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                        ملاحظة: في حال عدم إرفاق ملف PDF خاص، ستقوم المنصة تلقائياً بتوليد وثيقة برلمانية رسمية معتمدة ومطابقة للمواصفات عند نقر المواطن على زر التحميل دون أي أخطاء 404.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Modal Actions */}
+                <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-end gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setIsProposalModalOpen(false)}
+                    className="rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-xs font-bold text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 transition cursor-pointer"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingProposal}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-6 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-red-700 transition cursor-pointer disabled:opacity-50"
+                  >
+                    {isSavingProposal ? (
+                      <>
+                        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                        <span>جارٍ الحفظ...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="h-3.5 w-3.5" />
+                        <span>{editingProposal ? "تحيين المبادرة التشريعية" : "حفظ ونشر المبادرة"}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Bulk Import & ARP Presets Modal */}
+        {isBulkImportModalOpen && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm overflow-y-auto"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setIsBulkImportModalOpen(false);
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="relative flex flex-col w-full max-w-2xl max-h-[90vh] rounded-3xl border border-zinc-200 bg-white shadow-2xl overflow-hidden dark:border-zinc-800 dark:bg-zinc-900 my-auto"
+              dir="rtl"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between p-5 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-950/40">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400">
+                    <Upload className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-zinc-900 dark:text-zinc-100">
+                      استيراد المبادرات ومقترحات القوانين (ARP / JSON / CSV)
+                    </h3>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                      استعادة سريعة لحزمة المبادرات الرسمية أو استيراد جماعي من ملفات خارجية
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsBulkImportModalOpen(false)}
+                  className="rounded-full p-2 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 transition cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-5 text-right">
+                {bulkImportFeedback && (
+                  <div
+                    className={`p-3 rounded-xl text-xs font-bold border flex items-center gap-2 ${
+                      bulkImportFeedback.type === "success"
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800"
+                        : "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/50 dark:text-red-300 dark:border-red-800"
+                    }`}
+                  >
+                    {bulkImportFeedback.type === "success" ? (
+                      <CheckCircle2 className="h-4 w-4 shrink-0" />
+                    ) : (
+                      <AlertCircle className="h-4 w-4 shrink-0" />
+                    )}
+                    <span>{bulkImportFeedback.text}</span>
+                  </div>
+                )}
+
+                {/* Option A: Quick One-Click ARP Presets Reset */}
+                <div className="rounded-2xl border-2 border-red-200/90 bg-gradient-to-r from-red-50/70 via-white to-amber-50/50 p-4 dark:border-red-900/60 dark:from-red-950/40 dark:via-zinc-900 dark:to-zinc-900 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 px-2.5 py-0.5 text-[10px] font-bold text-red-800 dark:bg-red-950/80 dark:text-red-300">
+                      <Sparkles className="h-3 w-3" />
+                      استعادة سريعة بنقرة واحدة
+                    </span>
+                    <span className="text-[11px] font-bold text-zinc-500 font-mono">39 مبادرة معتمدة</span>
+                  </div>
+                  <h4 className="text-sm font-black text-zinc-900 dark:text-zinc-100">
+                    حزمة المبادرات البرلمانية الرسمية المعتمدة (2023 - 2026)
+                  </h4>
+                  <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                    تحميل كافة مقترحات ومشاريع القوانين والمسائلات الكتابية الخاصة بالنائب أسماء درويش ومجلس نواب الشعب (الحرايرية، بني مهيرة، سيدي منصور، مجلة الصرف، دعم الأمهات، تقنين الدرون، مسائلات منوبة...).
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleResetToOfficialArpDataset}
+                    disabled={bulkImportLoading}
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-red-700 transition cursor-pointer disabled:opacity-50"
+                  >
+                    {bulkImportLoading ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                        <span>جارٍ الاستعادة والتحميل...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Database className="h-4 w-4" />
+                        <span>استعادة حزمة المبادرات البرلمانية الرسمية كاملة (ARP)</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                <div className="relative flex items-center justify-center py-1">
+                  <span className="absolute inset-x-0 h-px bg-zinc-200 dark:bg-zinc-800" />
+                  <span className="relative bg-white px-3 text-xs font-bold text-zinc-400 dark:bg-zinc-900">
+                    أو استيراد بيانات مخصصة
+                  </span>
+                </div>
+
+                {/* Option B: Custom JSON or CSV Import */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                      الصق بيانات JSON أو CSV:
+                    </label>
+                    <div className="flex items-center gap-3 text-xs">
+                      <label className="flex items-center gap-1 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="importMode"
+                          value="append"
+                          checked={bulkImportMode === "append"}
+                          onChange={() => setBulkImportMode("append")}
+                          className="accent-red-600"
+                        />
+                        <span>إضافة للموجود (دمج)</span>
+                      </label>
+                      <label className="flex items-center gap-1 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="importMode"
+                          value="replace"
+                          checked={bulkImportMode === "replace"}
+                          onChange={() => setBulkImportMode("replace")}
+                          className="accent-red-600"
+                        />
+                        <span className="text-red-600 font-bold">استبدال كامل</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <textarea
+                    rows={6}
+                    value={bulkImportText}
+                    onChange={(e) => setBulkImportText(e.target.value)}
+                    placeholder={`[
+  {
+    "number": "2026/038",
+    "title": "مقترح قانون يتعلق بـ...",
+    "type": "مقترح قانون",
+    "committee": "لجنة التشريع العام",
+    "depositDate": "20 جوان 2026",
+    "year": 2026,
+    "status": "قيد الدرس باللجنة",
+    "summary": "شرح الأسباب..."
+  }
+]
+أو بتنسيق CSV:
+الرقم,الموضوع,النوع,تاريخ الإيداع,السنة,اللجنة,الوضعية`}
+                    className="w-full rounded-xl border border-zinc-200 bg-zinc-50/70 p-3 text-xs font-mono text-zinc-900 placeholder:text-zinc-400 focus:border-red-500 focus:bg-white focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                  />
+
+                  {/* Upload file helper */}
+                  <div className="flex items-center justify-between text-xs text-zinc-500">
+                    <label className="inline-flex items-center gap-1.5 cursor-pointer text-red-600 hover:text-red-700 font-bold">
+                      <FileSpreadsheet className="h-4 w-4" />
+                      <span>أو اختر ملف .json أو .csv من جهازك</span>
+                      <input
+                        type="file"
+                        accept=".json,.csv,text/csv,application/json"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            const content = ev.target?.result as string;
+                            if (content) setBulkImportText(content);
+                          };
+                          reader.readAsText(file);
+                        }}
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                {/* Modal Actions */}
+                <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-end gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setIsBulkImportModalOpen(false)}
+                    className="rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-xs font-bold text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 transition cursor-pointer"
+                  >
+                    إغلاق
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExecuteBulkImport}
+                    disabled={bulkImportLoading || !bulkImportText.trim()}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-6 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-red-700 transition cursor-pointer disabled:opacity-50"
+                  >
+                    {bulkImportLoading ? (
+                      <>
+                        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                        <span>جارٍ الاستيراد...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-3.5 w-3.5" />
+                        <span>تنفيذ الاستيراد</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+</main>
     </div>
   );
 }
